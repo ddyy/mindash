@@ -1,0 +1,22 @@
+{
+  "name": "mindash",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled --compatibility-flags nodejs_compat",
+    "types": "wrangler types",
+    "check": "tsc --noEmit",
+    "migrate:local": "wrangler d1 migrations apply mindash --local",
+    "test": "bash test/run.sh"
+  },
+  "dependencies": {
+    "@cloudflare/puppeteer": "^1.3.0",
+    "@cloudflare/workers-oauth-provider": "^0.10.2",
+    "@simplewebauthn/server": "^13.3.2",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "wrangler": "^4.0.0"
+  }
+}

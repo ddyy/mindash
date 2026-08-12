@@ -1,0 +1,20 @@
+.monitor ul.mon { list-style: none; margin: 0; padding: 0; }
+.monitor .mon li { display: flex; align-items: center; gap: 0.55rem; padding: 0.3rem 0; }
+.monitor .mon .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; flex: none; }
+.monitor .mon .dot.up { background: var(--positive); }
+.monitor .mon .dot.down { background: var(--negative); }
+/* list-link convention (matches ul.feed): text color, no underline,
+   accent on hover - every row here is a link, so color isn't the cue */
+.monitor .mon a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); text-decoration: none; }
+.monitor .mon a:hover { color: var(--accent); }
+.monitor .mon .stat { margin-left: auto; flex: none; color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+/* per-site check history: a mini latency graph in heartbeat's bar
+   language - bars bottom-align and green height tracks response time */
+.monitor .mon-bars { display: flex; gap: 2px; margin-left: auto; flex: none; align-items: flex-end; height: 16px; }
+.monitor .mon-bars + .stat { margin-left: 0.55rem; }
+.monitor .mon-bars .bar { width: 5px; border-radius: 1.5px; background: var(--border); }
+.monitor .mon-bars .bar.ok { background: var(--positive); }
+.monitor .mon-bars .bar.fail { background: var(--negative); }
+@media (max-width: 760px) {
+  .monitor .mon-bars { display: none; } /* narrow rows: dot + stat carry the state */
+}

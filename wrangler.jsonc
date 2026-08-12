@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mindash",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  // PRODUCTION posture, shipped as-is (the one-click deploy uses this file
+  // unmodified): global_fetch_strictly_public is required by the CIMD
+  // authentication lane, which src/index.ts enables unconditionally.
+  // The flag breaks ALL outbound fetch in local workerd, so local dev and
+  // the integration suites override the flag list on the command line
+  // (see the "dev" script in package.json) - never by editing this file.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    // Sweep cadence; per-widget refresh_interval decides what is actually due.
+    "crons": ["*/2 * * * *"]
+  },
+  "kv_namespaces": [
+    // Rendered-data cache only - never coordination.
+    // Placeholder ids work for `wrangler dev` (local state is name-keyed).
+    // For deploys: the Deploy to Cloudflare button provisions these
+    // automatically, or create them yourself:
+    //   npx wrangler kv namespace create CACHE
+    //   npx wrangler kv namespace create OAUTH_KV
+    //   npx wrangler d1 create mindash
+    { "binding": "CACHE", "id": "REPLACE_WITH_YOUR_KV_ID" },
+    // Dedicated namespace owned by workers-oauth-provider (clients, grants,
+    // hashed tokens). Separate from CACHE so cache lifecycle can never touch
+    // authorization state.
+    { "binding": "OAUTH_KV", "id": "REPLACE_WITH_YOUR_KV_ID" }
+  ],
+  // Headless Chromium for the scrape widget (Browser Rendering).
+  // "remote": true makes wrangler dev proxy renders to Cloudflare's real
+  // rendering fleet instead of a local Chromium - same egress IPs and
+  // behavior as production (some sites treat home IPs and datacenter IPs
+  // differently), at the cost of requiring a wrangler login and spending
+  // real browser-minutes during dev. Drop it to render locally.
+  "browser": { "binding": "BROWSER", "remote": true },
+  "r2_buckets": [
+    // Theme assets only (background image, logo) — uploaded via the editor,
+    // served at /asset/<key> with immutable caching.
+    { "binding": "ASSETS", "bucket_name": "mindash-assets" }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mindash",
+      "database_id": "REPLACE_WITH_YOUR_D1_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "rules": [
+    { "type": "Text", "globs": ["**/*.yaml", "**/*.css", "**/*.sql", "**/*.client.js"], "fallthrough": true }
+  ]
+}

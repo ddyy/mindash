@@ -1,0 +1,123 @@
+# Seed config: imported as v1 on first boot, import-only afterwards
+# (runtime config lives in D1). Layout: pages -> rows -> columns -> widgets;
+# column widths are fractions of a 12-track grid.
+#
+# Everything here is keyless: the dashboard works the moment it deploys.
+# The layout is also the demo - it leads with what makes mindash distinct
+# (push heartbeats, MCP, live-resolved images) over commodity widgets.
+pages:
+  - name: Home
+    rows:
+      - columns:
+          - width: 2/3
+            widgets:
+              - name: welcome-note
+                type: note
+                title: Welcome
+                text: |
+                  ## Your dashboard is live
+
+                  Hit **Edit** (top right) to rearrange, restyle, or replace all of
+                  this - or point a [Claude connector](https://modelcontextprotocol.io)
+                  at `/mcp` and edit by chat. Try the Theme panel for palettes like
+                  `terminal` and `paper`.
+              - name: search-home
+                type: search
+                title: Search
+              - name: feed-home
+                type: rss
+                title: News
+                description: Two feeds merged newest-first - The Verge and xkcd.
+                urls:
+                  - https://www.theverge.com/rss/index.xml
+                  - https://xkcd.com/rss.xml
+                refresh_interval: 1h
+                limit: 6
+          - width: 1/3
+            widgets:
+              - name: weather-home
+                type: weather
+                title: Weather
+                latitude: 37.77
+                longitude: -122.42
+                location: San Francisco
+                refresh_interval: 30m
+              - name: backup-demo
+                type: heartbeat
+                title: Nightly backup
+                description: A push monitor - your cron jobs POST here. Create its token under Settings.
+                expect_every: 24h
+                anchor: "02:00"
+                grace: 1h
+                history: 10
+                fields:
+                  - label: Size
+                    path: bytes
+              - name: crypto-home
+                type: crypto
+                title: Crypto
+                coins:
+                  - bitcoin
+                  - ethereum
+                refresh_interval: 15m
+      - columns:
+          - width: 1/3
+            widgets:
+              - name: mcp-demo
+                type: mcp
+                title: MCP widget
+                description: A live tools/call against Cloudflare's docs MCP server - agents can be widgets too.
+                url: https://docs.mcp.cloudflare.com/mcp
+                tool: search_cloudflare_documentation
+                args:
+                  query: workers limits
+                refresh_interval: 6h
+              - name: repo-stats
+                type: json-api
+                title: workers-sdk stats
+                description: Any JSON endpoint, mapped with dot paths.
+                url: https://api.github.com/repos/cloudflare/workers-sdk
+                refresh_interval: 1h
+                fields:
+                  - label: Stars
+                    path: stargazers_count
+                  - label: Open issues
+                    path: open_issues_count
+          - width: 1/3
+            widgets:
+              - name: xkcd-home
+                type: image
+                title: Today's xkcd
+                description: An image resolved from a JSON API each refresh.
+                source_url: https://xkcd.com/info.0.json
+                path: img
+                image_origin: https://imgs.xkcd.com
+                link: https://xkcd.com
+                refresh_interval: 6h
+          - width: 1/3
+            widgets:
+              - name: clock-home
+                type: clock
+                title: World clock
+                clocks:
+                  - label: New York
+                    tz: America/New_York
+                  - label: London
+                    tz: Europe/London
+                  - label: Tokyo
+                    tz: Asia/Tokyo
+              - name: countdown-home
+                type: countdown
+                title: New year
+                target: "2027-01-01"
+              - name: bookmarks-home
+                type: bookmarks
+                title: Bookmarks
+                favicons: shown
+                links:
+                  - title: GitHub
+                    url: https://github.com
+                  - title: Hacker News
+                    url: https://news.ycombinator.com
+                  - title: Cloudflare dashboard
+                    url: https://dash.cloudflare.com

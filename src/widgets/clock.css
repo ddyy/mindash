@@ -1,0 +1,6 @@
+/* Size steps for the time itself; labels stay put so the rows keep their
+   rhythm and a large clock does not turn into two large columns. */
+section.widget ul.kv.size-large .v { font-size: 1.35rem; line-height: 1.25; }
+section.widget ul.kv.size-xlarge .v { font-size: 1.9rem; line-height: 1.2; }
+section.widget ul.kv.size-large .k,
+section.widget ul.kv.size-xlarge .k { align-self: center; }

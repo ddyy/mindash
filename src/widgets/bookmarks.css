@@ -1,0 +1,2 @@
+ul.bookmarks-list li { display: flex; align-items: center; gap: 0.45rem; }
+ul.bookmarks-list .favicon { width: 16px; height: 16px; border-radius: 3px; flex: none; }

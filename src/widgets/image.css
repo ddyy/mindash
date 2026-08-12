@@ -1,0 +1,25 @@
+/* No frame around the image: the card already insets it by its own
+   padding and draws its own border, so a hairline here is a border
+   inside a border on every photo. (It was added for white-plate images
+   like xkcd on a dark card - but contrast already bounds those, and the
+   one case that truly needs an edge, a white image on a light theme,
+   can't be detected in CSS: themes set `card` independently of the
+   browser's color scheme.) */
+.image-widget { width: 100%; display: block; border-radius: var(--radius-sm); }
+
+.image-link { display: block; line-height: 0; }
+
+/* Fit pages: the image expands to the card's remaining height and
+   centers within it (object-fit letterboxes symmetrically). Overrides
+   the card's flex-shrink:0 content rule and any fixed height - the
+   card's share defines the size there. */
+main.fit-screen .col > section.widget > .image-widget,
+main.fit-screen .col > section.widget > .image-link {
+  flex: 1 1 0;
+  min-height: 0;
+}
+main.fit-screen .col > section.widget > .image-link { display: flex; }
+main.fit-screen .col > section.widget .image-widget {
+  height: 100% !important;
+  width: 100%;
+}

@@ -1,0 +1,6 @@
+node_modules/
+.wrangler/
+.dev.vars
+.test-dist/
+.int-state/
+extension.zip

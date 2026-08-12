@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>mindash new tab - options</title>
+<script src="options.js" defer></script>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 1rem; min-width: 22rem; }
+  label { display: block; margin-bottom: 0.35rem; font-weight: 600; }
+  input {
+    width: 100%; box-sizing: border-box; padding: 0.45rem 0.6rem; font: inherit;
+    border: 1px solid light-dark(#d5d9e0, #333a45); border-radius: 6px;
+    background: light-dark(#fff, #1b1e24); color: inherit;
+  }
+  button {
+    margin-top: 0.6rem; padding: 0.45rem 1rem; font: inherit; cursor: pointer;
+    border: 0; border-radius: 6px; background: #3d99f5; color: #fff;
+  }
+  #msg { font-size: 0.85rem; min-height: 1.2rem; margin-top: 0.4rem; }
+</style>
+</head>
+<body>
+<form id="f">
+  <label for="url">Dashboard URL</label>
+  <input id="url" type="url" placeholder="https://dash.example.com/" required>
+  <button type="submit">Save</button>
+  <div id="msg"></div>
+</form>
+</body>
+</html>

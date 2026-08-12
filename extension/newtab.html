@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New Tab</title>
+<script src="newtab.js"></script>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    font: 15px/1.5 system-ui, sans-serif;
+    background: light-dark(#fafafa, #14161a); color: light-dark(#1d2025, #d6d9de);
+  }
+  main { max-width: 26rem; padding: 2rem; text-align: center; }
+  main[hidden] { display: none; }
+  h1 { font-size: 1.1rem; margin: 0 0 0.4rem; }
+  p { color: light-dark(#5b6270, #8b93a1); margin: 0 0 1.2rem; }
+  input {
+    width: 100%; box-sizing: border-box; padding: 0.55rem 0.7rem; font: inherit;
+    border: 1px solid light-dark(#d5d9e0, #333a45); border-radius: 8px;
+    background: light-dark(#fff, #1b1e24); color: inherit;
+  }
+  button {
+    margin-top: 0.7rem; padding: 0.55rem 1.2rem; font: inherit; cursor: pointer;
+    border: 0; border-radius: 8px; background: #3d99f5; color: #fff;
+  }
+  .err { color: #e5534b; font-size: 0.85rem; min-height: 1.2rem; margin-top: 0.5rem; }
+</style>
+</head>
+<body>
+<main id="setup" hidden>
+  <h1>Point this new tab at your mindash</h1>
+  <p>Enter your instance URL once - every new tab opens it from then on.
+  Change it later from the extension's options.</p>
+  <form id="f">
+    <input id="url" type="url" placeholder="https://dash.example.com/" autofocus required>
+    <button type="submit">Save</button>
+    <div class="err" id="err"></div>
+  </form>
+</main>
+</body>
+</html>

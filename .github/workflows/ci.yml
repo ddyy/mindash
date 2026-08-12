@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Real workerd + D1 via wrangler dev: DCR admission lifecycle
+      # (quota, failed-registration release, expiry regression).
+      - run: bash test/integration/dcr.sh
+      # Primary connector flow: seeded owner session -> consent -> PKCE
+      # exchange -> scoped /mcp -> refresh -> grant revocation.
+      - run: node test/integration/auth.mjs
+      # WebAuthn ceremonies end-to-end with an emulated authenticator:
+      # claim, login, replay, wrong origin/RP ID, counter, step-up, recovery.
+      - run: node test/integration/webauthn.mjs
+      # Activity log: headers, filters, keyset pagination, retention form.
+      - run: node test/integration/log.mjs

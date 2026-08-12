@@ -1,0 +1,4 @@
+section.widget iframe { border-radius: var(--radius-sm); background: var(--bg); }
+/* height: fill - the frame absorbs the card's free height. The floor
+   keeps auto-height cards (plain scrolling pages) from collapsing. */
+section.widget iframe.iframe-fill { flex: 1 1 auto; height: 100%; min-height: 240px; }

@@ -1,0 +1,4 @@
+# Copy to .dev.vars (gitignored) if you need the LEGACY push-token lane
+# (config-referenced PUSH_TOKEN_* Worker secrets). New instances don't:
+# create push tokens under Settings -> Push tokens instead.
+# PUSH_TOKEN_BACKUP_DEMO=replace-with-long-random-token

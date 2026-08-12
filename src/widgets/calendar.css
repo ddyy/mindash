@@ -1,0 +1,6 @@
+ul.cal { list-style: none; margin: 0; padding: 0; }
+ul.cal li { display: flex; gap: 0.6rem; padding: 0.3rem 0; border-top: 1px solid var(--border); align-items: baseline; }
+ul.cal li:first-child { border-top: none; }
+.cal-when { flex: none; width: 7.5em; color: var(--accent); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.cal-what { min-width: 0; overflow-wrap: anywhere; }
+.cal-what .meta { display: block; margin-top: 0; }

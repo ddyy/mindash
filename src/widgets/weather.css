@@ -1,0 +1,7 @@
+.weather .now { display: flex; align-items: baseline; gap: 0.6rem; }
+.weather .temp { font-size: 2rem; font-weight: 650; }
+.weather .cond { font-size: 0.95rem; }
+.weather .now .meta { display: inline; margin: 0; }
+.weather ul.days { list-style: none; margin: 0.6rem 0 0; padding: 0; }
+.weather ul.days li { display: flex; justify-content: space-between; padding: 0.15rem 0; }
+.weather ul.days .meta { display: inline; margin: 0; }
