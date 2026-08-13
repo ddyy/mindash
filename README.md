@@ -127,8 +127,10 @@ editor form, fetch, render, CSS in one file):
   thumbnails, @handle search), Hacker News
 - **Personal** — weather (geocoded search, C/F), calendar (iCal with
   simple recurrence + EXDATE), bookmarks (optional favicons via one fixed
-  icon origin), search box, notes (safe markdown subset), world clock,
-  countdown (timezone-aware, DST-correct)
+  icon origin), search box (DuckDuckGo, Google, Bing, Brave, Startpage,
+  Ecosia, Kagi, Wikipedia, and YouTube presets — each setting the engine's
+  own query parameter — or a custom engine), notes (safe markdown subset),
+  world clock, countdown (timezone-aware, DST-correct)
 - **Markets** — crypto (CoinGecko, searchable coin picker) and stocks
   (Yahoo, symbol search) with colored day deltas
 - **Display** — JSON API (dot-path field mapping with a live field

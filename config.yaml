@@ -24,6 +24,7 @@ pages:
               - name: search-home
                 type: search
                 title: Search
+                engine: DuckDuckGo
               - name: feed-home
                 type: rss
                 title: News
