@@ -196,6 +196,10 @@ test("stamp: a healthy card just says when it updated", async () => {
   assert.ok(!out.includes("overdue") && !out.includes("showing data from"));
 });
 
+// The error text belongs to the STAMP's tooltip, not the card body: it is
+// diagnostics about the card rather than content of it, and a long error
+// line used to push real content down (or out of a fit-screen column)
+// every time a source blipped.
 test("stamp: a failed fetch names both times - when it failed, and how old the data is", async () => {
   const out = (
     await renderMain(
@@ -204,18 +208,61 @@ test("stamp: a failed fetch names both times - when it failed, and how old the d
       0,
     )
   ).value;
-  assert.match(out, /last fetch failed 4m ago: timeout/);
+  assert.match(out, /title="last fetch failed 4m ago: timeout"/);
   assert.match(out, /showing data from 3h ago/); // whose timestamp it is, said plainly
   assert.match(out, /stamp-stale/);
   assert.ok(!out.includes("updated 3h ago"), "the bare wording would read as the failure's age");
+  assert.ok(!/<p class="error">last fetch failed/.test(out), "the card body no longer carries the error");
 });
 
 test("stamp: a failure with no recorded time still reads correctly", async () => {
   const out = (
     await renderMain(stampEnv({ fetchedAt: Date.now() - 3600_000, last_error: "boom" }), stampWidget(), 0)
   ).value;
-  assert.match(out, /last fetch failed: boom/);
+  assert.match(out, /title="last fetch failed: boom"/);
   assert.match(out, /showing data from 1h ago/);
+});
+
+// The one case with no success to stamp: without a stamp of its own the
+// failure would have nowhere left to appear at all.
+test("stamp: a card that never fetched still reports its failure", async () => {
+  const env = {
+    DB: {
+      prepare: () => ({
+        bind: () => ({
+          all: async () => ({
+            results: [{
+              instance_id: "w_1", source_rev: 1, payload: null, current_key: null, prev_key: null,
+              fetched_at: null, last_error: "dns lookup failed", updated_at: Date.now() - 2 * 60_000,
+            }],
+          }),
+          first: async () => null,
+          run: async () => ({ meta: {} }),
+        }),
+      }),
+    },
+  } as never;
+  const out = (await renderMain(env, stampWidget(), 0)).value;
+  assert.match(out, /fetch failed 2m ago/);
+  assert.match(out, /title="dns lookup failed"/);
+  assert.match(out, /stamp-stale/);
+  assert.match(out, /refresh pending/, "the body still says why there is nothing to show");
+});
+
+// An overdue card has no error text to borrow, so its tooltip has to
+// explain the mark on its own.
+test("stamp: the overdue mark carries its own explanation", async () => {
+  const out = (await renderMain(stampEnv({ fetchedAt: Date.now() - 2 * 3600_000 }), stampWidget(), 0)).value;
+  assert.match(
+    out,
+    /title="last successful refresh 2h ago - well past the 15m refresh interval, and nothing was recorded as failing"/,
+  );
+});
+
+// A healthy stamp is bare text - no wrapper, and nothing to hover.
+test("stamp: a healthy card has no tooltip", async () => {
+  const out = (await renderMain(stampEnv({ fetchedAt: Date.now() - 60_000 }), stampWidget(), 0)).value;
+  assert.ok(!/title=""/.test(out), "an empty tooltip is worse than none");
 });
 
 test("stamp: data far past its interval is overdue even with no error recorded", async () => {

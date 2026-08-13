@@ -179,19 +179,52 @@ const OVERDUE_FACTOR = 3;
 // untouched - so the stamp is ALWAYS the last success. Saying so matters
 // only when a failure is on screen with it: a bare "updated 3h ago" under
 // a red line reads as if the failure were 3h old.
+//
+// The failure's DETAIL rides in the stamp's tooltip rather than in the
+// card body. A fetch error is diagnostics about the card, not content of
+// it, and a stack-trace-ish line pushed the real content down (or out of
+// a fit-screen column) every time a source blipped. The stamp still turns
+// red on its own, so the card announces the trouble without spending
+// space on it; the text is one hover - or one click through to the
+// activity log - away.
 function stamp(
   w: PullWidgetConfig,
   fetchedAt: number,
-  failed: boolean,
+  error: string | null,
+  errorAt: number | null,
   now: number,
-): { text: string; cls: string } {
-  if (failed) return { text: `showing data from ${relativeTime(fetchedAt)}`, cls: "stamp-stale" };
+): { text: string; cls: string; title: string } {
+  if (error !== null) {
+    return {
+      text: `showing data from ${relativeTime(fetchedAt)}`,
+      cls: "stamp-stale",
+      title: `last fetch failed${errorAt ? ` ${relativeTime(errorAt)}` : ""}: ${error}`,
+    };
+  }
   // No error recorded and yet far past due: the silent failure - a sweep
   // that stopped running records nothing, so nothing else surfaces it.
   if (w.refreshSeconds > 0 && now - fetchedAt > w.refreshSeconds * 1000 * OVERDUE_FACTOR) {
-    return { text: `updated ${relativeTime(fetchedAt)} · overdue`, cls: "stamp-stale" };
+    return {
+      text: `updated ${relativeTime(fetchedAt)} · overdue`,
+      cls: "stamp-stale",
+      title: `last successful refresh ${relativeTime(fetchedAt)} - well past the ${
+        w.refreshSeconds >= 3600 ? `${Math.round(w.refreshSeconds / 3600)}h` : `${Math.round(w.refreshSeconds / 60)}m`
+      } refresh interval, and nothing was recorded as failing`,
+    };
   }
-  return { text: `updated ${relativeTime(fetchedAt)}`, cls: "" };
+  return { text: `updated ${relativeTime(fetchedAt)}`, cls: "", title: "" };
+}
+
+// A card that has NEVER fetched successfully has no freshness to stamp,
+// so the failure would have nowhere to live once it left the body. It
+// gets a stamp of its own - the one case where the stamp reports the
+// failing attempt's time rather than a success.
+function failedStamp(error: string, errorAt: number | null): { text: string; cls: string; title: string } {
+  return {
+    text: `fetch failed${errorAt ? ` ${relativeTime(errorAt)}` : ""}`,
+    cls: "stamp-stale",
+    title: error,
+  };
 }
 
 function widgetSection(
@@ -211,18 +244,17 @@ function widgetSection(
   } else {
     body = html`<p class="pending">refresh pending…</p>`;
   }
-  const mark = payload ? stamp(w, payload.fetchedAt, error !== null, Date.now()) : null;
+  const mark = payload
+    ? stamp(w, payload.fetchedAt, error, errorAt, Date.now())
+    : error !== null
+      ? failedStamp(error, errorAt)
+      : null;
   return html`<section class="${cardClass(w)}" data-widget="${w.name}" data-wid="${w.id}" style="${accentStyle(w)}">
     <h2>${w.title}</h2>
     ${w.description ? html`<p class="widget-desc">${w.description}</p>` : null}
     ${body}
     ${
-      error
-        ? html`<p class="error">last fetch failed${errorAt ? ` ${relativeTime(errorAt)}` : ""}: ${error}</p>`
-        : null
-    }
-    ${
-      payload || refresh
+      mark || refresh
         ? html`<span class="meta card-stamp">${
             refresh
               ? html`<button class="w-refresh" data-refresh="${w.id}" title="Refresh now" aria-label="Refresh this widget now">↻</button>`
@@ -231,11 +263,12 @@ function widgetSection(
             mark
               ? refresh
                 ? // owner: the freshness stamp is the way into this
-                  // widget's own activity history
-                  html`<a class="${mark.cls ? `w-log ${mark.cls}` : "w-log"}" href="/settings/log?widget=${w.id}" title="Activity log for this widget">${mark.text}</a>`
+                  // widget's own activity history, and the tooltip says
+                  // what went wrong before they spend a click on it
+                  html`<a class="${mark.cls ? `w-log ${mark.cls}` : "w-log"}" href="/settings/log?widget=${w.id}" title="${mark.title || "Activity log for this widget"}">${mark.text}</a>`
                 : // a healthy stamp needs no wrapper - only a marked one does
                   mark.cls
-                  ? html`<span class="${mark.cls}">${mark.text}</span>`
+                  ? html`<span class="${mark.cls}" title="${mark.title}">${mark.text}</span>`
                   : html`${mark.text}`
               : null
           }</span>`
