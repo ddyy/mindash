@@ -220,16 +220,28 @@ export const EDITOR_CSS = /* css */ `
    it as it has at its sides and foot */
 #center { overflow-y: auto; padding: 0.75rem 1rem; background: var(--bg); }
 #preview main { padding: 0; max-width: none; }
-/* The editor injects page, row, and column handles that are not present on
-   the live dashboard. Reusing fit-screen's bounded track algorithm around
-   those extra grid items can crush ordinary cards, so the preview remains
-   natural-height. Marked cards still show a representative expanded size
-   without changing the allocation of their siblings. */
-#preview main.fit-screen .row { flex: none !important; grid-template-rows: none; grid-auto-rows: auto; }
-#preview main.fit-screen .col { overflow: visible; }
-#preview main.fit-screen .col > section.widget { flex: none; min-height: auto; overflow: visible; }
-#preview main.fit-screen .col > section.widget.expand { min-height: 18rem; }
-#preview main.fit-screen .col > section.widget > h2 { position: static; margin: 0 0 0.6rem; padding: 0; }
+/* Fit-screen rows get a representative viewport independently rather than
+   sharing one short editor viewport. Editor handles take explicit auto
+   tracks, columns receive the remainder, and cards never shrink below
+   their natural height. This makes expand mean “fill the column” here too
+   without letting a busy draft collapse every card in the preview. */
+@media (min-width: 901px) {
+  #preview main.fit-screen .row {
+    flex: none !important; min-height: 30rem;
+    grid-template-rows: auto minmax(0, 1fr); grid-auto-rows: auto;
+  }
+  #preview main.fit-screen .row:has(> .row-title) {
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  #preview main.fit-screen .col { overflow-y: auto; min-height: 0; }
+  #preview main.fit-screen .col > section.widget {
+    flex: 0 0 auto; min-height: auto; overflow: visible;
+  }
+  #preview main.fit-screen .col > section.widget.expand { flex: 1 0 auto; }
+  #preview main.fit-screen .col > section.widget > h2 {
+    position: static; margin: 0 0 0.6rem; padding: 0;
+  }
+}
 /* visible containers: the page, its rows, and their columns all read as
    structure in the editor - one nesting level per border weight */
 #preview main.page-frame {

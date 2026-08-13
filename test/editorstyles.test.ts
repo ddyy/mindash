@@ -129,13 +129,18 @@ test("preview widget delete controls remain visibly destructive", () => {
 test("fit-screen previews show vertically expandable cards", () => {
   assert.match(
     EDITOR_CSS,
-    /#preview main\.fit-screen \.row \{ flex: none !important; grid-template-rows: none; grid-auto-rows: auto; \}/,
-    "editor decorations cannot force cards into bounded fit-screen tracks",
+    /#preview main\.fit-screen \.row \{[\s\S]*flex: none !important; min-height: 30rem;[\s\S]*grid-template-rows: auto minmax\(0, 1fr\);/,
+    "each fit row supplies safe leftover preview height after its editor handle",
   );
   assert.match(
     EDITOR_CSS,
-    /#preview main\.fit-screen \.col > section\.widget\.expand \{ min-height: 18rem; \}/,
-    "marked cards show a representative expanded height",
+    /#preview main\.fit-screen \.col > section\.widget \{[\s\S]*flex: 0 0 auto; min-height: auto;/,
+    "ordinary cards retain their natural height",
+  );
+  assert.match(
+    EDITOR_CSS,
+    /#preview main\.fit-screen \.col > section\.widget\.expand \{ flex: 1 0 auto; \}/,
+    "marked cards absorb the column's remaining preview height",
   );
 });
 
