@@ -293,7 +293,23 @@ function renderOutline() {
 
   page.rows.forEach((row, ri) => {
     const rowBox = el("div", "ol-row");
+    rowBox.dataset.row = String(ri);
     const rowHead = el("div", "ol-col-head" + (selected?.kind === "row" && selected.rowIdx === ri ? " selected" : ""));
+    rowHead.draggable = true;
+    rowHead.title = "Drag to reorder row";
+    rowHead.addEventListener("dragstart", (e) => {
+      if (e.target.closest("button")) { e.preventDefault(); return; }
+      draggedRowIdx = ri;
+      rowHead.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", "row:" + ri);
+    });
+    rowHead.addEventListener("dragend", () => { rowHead.classList.remove("dragging"); clearDrag(); });
+    dropTarget(
+      rowHead,
+      (p) => { if (p.kind === "row" && p.ri !== ri) moveRow(p.ri, ri); },
+      (p) => { if (p.kind === "row" && p.ri !== ri) previewRowBefore(p.ri, ri); },
+    );
     const rowLabel = el("strong", "t", rowLabelOf(row, ri) + (row.title ? " · " + row.title : ""));
     rowLabel.style.cursor = "pointer";
     rowLabel.addEventListener("click", () => { selected = { kind: "row", rowIdx: ri }; renderAll(); highlightPreview(); });
@@ -316,7 +332,30 @@ function renderOutline() {
 
     row.columns.forEach((col, ci) => {
     const colBox = el("div", "ol-col");
+    colBox.dataset.row = String(ri);
+    colBox.dataset.col = String(ci);
     const head = el("div", "ol-col-head" + (selected?.kind === "column" && selected.rowIdx === ri && selected.colIdx === ci ? " selected" : ""));
+    head.draggable = true;
+    head.title = "Drag to reorder or move column";
+    head.addEventListener("dragstart", (e) => {
+      if (e.target.closest("button")) { e.preventDefault(); return; }
+      e.stopPropagation();
+      draggedColRef = { ri, ci };
+      head.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", "col:" + ri + ":" + ci);
+    });
+    head.addEventListener("dragend", () => { head.classList.remove("dragging"); clearDrag(); });
+    dropTarget(
+      head,
+      (p) => {
+        if (p.kind === "col" && !(p.ri === ri && p.ci === ci)) moveColumn({ ri: p.ri, ci: p.ci }, ri, ci);
+        else if (p.kind === "widget") moveWidgetTo(p.wid, ri, ci, col.widgets[0]?.id || null);
+      },
+      (p) => {
+        if (p.kind === "col" && !(p.ri === ri && p.ci === ci)) previewColumnBefore(p, ri, ci);
+      },
+    );
     const title = el("span", "t", "Column " + (ci + 1) + " (" + col.width + ")" + (col.title ? " · " + col.title : ""));
     title.style.cursor = "pointer";
     title.addEventListener("click", () => {
@@ -337,9 +376,32 @@ function renderOutline() {
       const row = el("div", "ol-widget" + (selected?.wid === w.id ? " selected" : ""));
       row.setAttribute("role", "button");
       row.tabIndex = 0;
+      row.draggable = true;
+      row.dataset.wid = w.id;
+      row.title = "Drag to reorder or move widget";
+      row.addEventListener("dragstart", (e) => {
+        if (e.target.closest("button")) { e.preventDefault(); return; }
+        e.stopPropagation();
+        draggedWid = w.id;
+        row.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(w.id));
+      });
+      row.addEventListener("dragend", () => { row.classList.remove("dragging"); clearDrag(); });
+      positionalDropTarget(
+        row,
+        (p, position) => {
+          if (p.kind === "widget" && p.wid !== w.id) moveWidgetRelative(p.wid, ri, ci, w.id, position === "after");
+        },
+      );
       const text = el("span", "ol-w-text");
       const tIcon = formsByType[w.type] && formsByType[w.type].icon;
-      text.appendChild(el("span", "t", (tIcon ? tIcon + " " : "") + widgetTitle(w)));
+      if (tIcon) {
+        const icon = el("span", "ol-w-icon", tIcon);
+        icon.setAttribute("aria-hidden", "true");
+        row.appendChild(icon);
+      }
+      text.appendChild(el("span", "t", widgetTitle(w)));
       text.appendChild(el("span", "ty", w.type));
       row.appendChild(text);
       const qd = el("button", "ol-mini ol-del", "✕");
@@ -355,6 +417,10 @@ function renderOutline() {
 
     const addW = el("button", "ol-mini ol-add", "+ widget");
     addW.addEventListener("click", () => openGallery(ri, ci));
+    dropTarget(
+      addW,
+      (p) => { if (p.kind === "widget") moveWidgetTo(p.wid, ri, ci, null); },
+    );
     colBox.appendChild(addW);
     rowBox.appendChild(colBox);
     });
@@ -367,6 +433,14 @@ function renderOutline() {
     pendingEnter = '.row[data-row="' + (page.rows.length - 1) + '"]';
     changed(true);
   });
+  dropTarget(
+    addRow,
+    (p) => {
+      if (p.kind === "row") moveRow(p.ri, page.rows.length);
+      else if (p.kind === "widget") moveToNewRow(p.wid, "bottom");
+    },
+    (p) => { if (p.kind === "row") previewRowAtEnd(p.ri); },
+  );
   root.appendChild(addRow);
 }
 
@@ -464,11 +538,12 @@ async function refreshPreview() {
 }
 
 // ---------- drag & drop + placeholders (preview decoration) ----------
-// Drag-and-drop is an ENHANCEMENT: the outline's move buttons and the
-// move-to picker remain the non-dragging mechanisms (WCAG 2.2 / G219).
+// Drag-and-drop is an ENHANCEMENT: keyboard movement plus the Inspector's
+// hierarchical move picker remain the non-dragging mechanisms.
 let draggedWid = null;
 let draggedRowIdx = null;
 let draggedColRef = null; // {ri, ci}
+let dragPreviewActive = false;
 
 function dragPayload() {
   if (draggedWid !== null) return { kind: "widget", wid: draggedWid };
@@ -476,7 +551,55 @@ function dragPayload() {
   if (draggedColRef !== null) return { kind: "col", ...draggedColRef };
   return null;
 }
-function clearDrag() { draggedWid = null; draggedRowIdx = null; draggedColRef = null; }
+function clearDrag(restorePreview = true) {
+  draggedWid = null;
+  draggedRowIdx = null;
+  draggedColRef = null;
+  if (restorePreview && dragPreviewActive) {
+    dragPreviewActive = false;
+    renderOutline();
+    refreshPreview();
+  }
+}
+
+function visualMoveBefore(source, target) {
+  if (!source || !target || source === target || !target.parentElement) return;
+  target.parentElement.insertBefore(source, target);
+  dragPreviewActive = true;
+}
+
+function previewRowBefore(fromRi, toRi) {
+  visualMoveBefore(
+    document.querySelector('#outline .ol-row[data-row="' + fromRi + '"]'),
+    document.querySelector('#outline .ol-row[data-row="' + toRi + '"]'),
+  );
+  visualMoveBefore(
+    document.querySelector('#preview .row[data-row="' + fromRi + '"]'),
+    document.querySelector('#preview .row[data-row="' + toRi + '"]'),
+  );
+}
+
+function previewRowAtEnd(fromRi) {
+  visualMoveBefore(
+    document.querySelector('#outline .ol-row[data-row="' + fromRi + '"]'),
+    document.querySelector("#outline .outline-content > .ol-add"),
+  );
+  visualMoveBefore(
+    document.querySelector('#preview .row[data-row="' + fromRi + '"]'),
+    document.querySelector("#preview main > .ph-row"),
+  );
+}
+
+function previewColumnBefore(from, toRi, toCi) {
+  visualMoveBefore(
+    document.querySelector('#outline .ol-col[data-row="' + from.ri + '"][data-col="' + from.ci + '"]'),
+    document.querySelector('#outline .ol-col[data-row="' + toRi + '"][data-col="' + toCi + '"]'),
+  );
+  visualMoveBefore(
+    document.querySelector('#preview .row[data-row="' + from.ri + '"] > .col[data-col="' + from.ci + '"]'),
+    document.querySelector('#preview .row[data-row="' + toRi + '"] > .col[data-col="' + toCi + '"]'),
+  );
+}
 
 function moveRow(fromRi, toRi) {
   const rows = draft.pages[pageIdx].rows;
@@ -532,6 +655,18 @@ function moveWidgetTo(id, ri, ci, beforeWid) {
   let idx = beforeWid ? col.widgets.findIndex((x) => x.id === beforeWid) : col.widgets.length;
   if (idx === -1) idx = col.widgets.length;
   col.widgets.splice(idx, 0, loc.widget);
+  changed();
+}
+
+function moveWidgetRelative(id, ri, ci, targetWid, after) {
+  const loc = findWidget(id);
+  if (!loc) return;
+  draft.pages[loc.pageIdx].rows[loc.rowIdx].columns[loc.colIdx].widgets.splice(loc.idx, 1);
+  const col = draft.pages[pageIdx].rows[ri]?.columns[ci];
+  if (!col) return;
+  const targetIdx = col.widgets.findIndex((x) => x.id === targetWid);
+  if (targetIdx === -1) col.widgets.push(loc.widget);
+  else col.widgets.splice(targetIdx + (after ? 1 : 0), 0, loc.widget);
   changed();
 }
 
@@ -732,12 +867,15 @@ function addRowAt(position) {
   changed(true);
 }
 
-function dropTarget(node, onDrop) {
+function dropTarget(node, onDrop, onPreview) {
   node.addEventListener("dragover", (e) => {
-    if (!dragPayload()) return;
+    const payload = dragPayload();
+    if (!payload) return;
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
     node.classList.add("drop-hover");
+    if (onPreview) onPreview(payload);
   });
   node.addEventListener("dragleave", () => node.classList.remove("drop-hover"));
   node.addEventListener("drop", (e) => {
@@ -745,8 +883,40 @@ function dropTarget(node, onDrop) {
     e.stopPropagation();
     node.classList.remove("drop-hover");
     const payload = dragPayload();
-    if (payload) onDrop(payload);
-    clearDrag();
+    if (payload) {
+      dragPreviewActive = false;
+      onDrop(payload);
+    }
+    clearDrag(false);
+  });
+}
+
+function positionalDropTarget(node, onDrop, onPreview) {
+  let position = "before";
+  const clearCue = () => node.classList.remove("drop-before", "drop-after");
+  node.addEventListener("dragover", (e) => {
+    const payload = dragPayload();
+    if (!payload) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    const box = node.getBoundingClientRect();
+    position = e.clientY < box.top + box.height / 2 ? "before" : "after";
+    node.classList.toggle("drop-before", position === "before");
+    node.classList.toggle("drop-after", position === "after");
+    if (onPreview) onPreview(payload, position);
+  });
+  node.addEventListener("dragleave", clearCue);
+  node.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearCue();
+    const payload = dragPayload();
+    if (payload) {
+      dragPreviewActive = false;
+      onDrop(payload, position);
+    }
+    clearDrag(false);
   });
 }
 
@@ -804,10 +974,13 @@ function decoratePreview() {
     const col = sec.closest(".col");
     const row = sec.closest(".row");
     if (col && row) {
-      dropTarget(sec, (p) => {
-        if (p.kind !== "widget" || p.wid === sec.dataset.wid) return;
-        moveWidgetTo(p.wid, Number(row.dataset.row), Number(col.dataset.col), sec.dataset.wid);
-      });
+      positionalDropTarget(
+        sec,
+        (p, position) => {
+          if (p.kind !== "widget" || p.wid === sec.dataset.wid) return;
+          moveWidgetRelative(p.wid, Number(row.dataset.row), Number(col.dataset.col), sec.dataset.wid, position === "after");
+        },
+      );
     }
     const qd = el("button", "qd", "✕");
     qd.title = "Delete " + widgetTitle(draft.pages[pageIdx].rows[Number(row.dataset.row)]?.columns[Number(col.dataset.col)]?.widgets.find((x) => x.id === sec.dataset.wid) || { type: "widget" });
@@ -840,9 +1013,11 @@ function decoratePreview() {
       e.dataTransfer.setData("text/plain", "row:" + ri);
     });
     rh.addEventListener("dragend", () => { rh.classList.remove("dragging"); clearDrag(); });
-    dropTarget(rh, (p) => {
-      if (p.kind === "row" && p.ri !== ri) moveRow(p.ri, ri);
-    });
+    dropTarget(
+      rh,
+      (p) => { if (p.kind === "row" && p.ri !== ri) moveRow(p.ri, ri); },
+      (p) => { if (p.kind === "row" && p.ri !== ri) previewRowBefore(p.ri, ri); },
+    );
     const rActions = el("span", "h-actions");
     const rowCount = draft.pages[pageIdx]?.rows.length || 0;
     for (const [sym, delta, label] of [["↑", -1, "Move row up"], ["↓", 1, "Move row down"]]) {
@@ -886,9 +1061,15 @@ function decoratePreview() {
         e.dataTransfer.setData("text/plain", "col:" + ri + ":" + ci);
       });
       ch.addEventListener("dragend", () => { ch.classList.remove("dragging"); clearDrag(); });
-      dropTarget(ch, (p) => {
-        if (p.kind === "col" && !(p.ri === ri && p.ci === ci)) moveColumn({ ri: p.ri, ci: p.ci }, ri, ci);
-      });
+      dropTarget(
+        ch,
+        (p) => {
+          if (p.kind === "col" && !(p.ri === ri && p.ci === ci)) moveColumn({ ri: p.ri, ci: p.ci }, ri, ci);
+        },
+        (p) => {
+          if (p.kind === "col" && !(p.ri === ri && p.ci === ci)) previewColumnBefore(p, ri, ci);
+        },
+      );
       const cActions = el("span", "h-actions");
       if (SPLITS[width]) {
         const sp = el("button", "mv-inline mv-split", "split");
@@ -990,8 +1171,14 @@ function decoratePreview() {
       ph.tabIndex = 0;
       ph.addEventListener("click", () => openGallery(ri, ci));
       ph.addEventListener("keydown", (e) => { if (e.key === "Enter") openGallery(ri, ci); });
-      dropTarget(ph, (p) => { if (p.kind === "widget") moveWidgetTo(p.wid, ri, ci, null); });
-      dropTarget(colEl, (p) => { if (p.kind === "widget") moveWidgetTo(p.wid, ri, ci, null); });
+      dropTarget(
+        ph,
+        (p) => { if (p.kind === "widget") moveWidgetTo(p.wid, ri, ci, null); },
+      );
+      dropTarget(
+        colEl,
+        (p) => { if (p.kind === "widget") moveWidgetTo(p.wid, ri, ci, null); },
+      );
       colEl.appendChild(ph);
     });
 
@@ -1050,7 +1237,7 @@ function decoratePreview() {
         selected = null;
         changed(true);
       }
-    });
+    }, (p) => { if (p.kind === "row") previewRowAtEnd(p.ri); });
     main.appendChild(ph);
   }
 }
@@ -3150,9 +3337,48 @@ initOutlinePanel();
 // inspector is a lot of canvas to give up when you are arranging a
 // layout rather than configuring one widget. Mobile ignores this - the
 // inspector is a bottom sheet there, driven by selection.
+const INSPECTOR_DEFAULT = 320;
+const INSPECTOR_MIN = 260;
+const INSPECTOR_MAX = 520;
 function initInspectorToggle() {
   const grid = document.querySelector(".editor-grid");
+  const storedWidth = parseInt(localStorage.getItem("mindash-inspector-w"));
+  const initialWidth = Number.isFinite(storedWidth)
+    ? Math.min(INSPECTOR_MAX, Math.max(INSPECTOR_MIN, storedWidth))
+    : INSPECTOR_DEFAULT;
+  document.body.style.setProperty("--inspector-w", initialWidth + "px");
+  document.body.style.setProperty("--inspector-expanded-w", initialWidth + "px");
   if (localStorage.getItem("mindash-inspector-collapsed") === "1") grid.classList.add("inspector-collapsed");
+
+  const bar = el("div", "inspector-resizer");
+  bar.title = "Drag to resize · double-click to reset width";
+  bar.addEventListener("dblclick", () => {
+    if (grid.classList.contains("inspector-collapsed")) return;
+    document.body.style.setProperty("--inspector-w", INSPECTOR_DEFAULT + "px");
+    document.body.style.setProperty("--inspector-expanded-w", INSPECTOR_DEFAULT + "px");
+    localStorage.setItem("mindash-inspector-w", String(INSPECTOR_DEFAULT));
+  });
+  bar.addEventListener("mousedown", (e) => {
+    if (grid.classList.contains("inspector-collapsed")) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = $("inspector").getBoundingClientRect().width || INSPECTOR_DEFAULT;
+    const move = (ev) => {
+      const w = Math.min(INSPECTOR_MAX, Math.max(INSPECTOR_MIN, startW + startX - ev.clientX));
+      document.body.style.setProperty("--inspector-w", w + "px");
+      document.body.style.setProperty("--inspector-expanded-w", w + "px");
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      const w = parseInt(getComputedStyle(grid).getPropertyValue("--inspector-w")) || INSPECTOR_DEFAULT;
+      localStorage.setItem("mindash-inspector-w", String(w));
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  });
+  $("inspector").before(bar);
+
   const toggle = el("button", "inspector-toggle");
   const sync = () => {
     const hidden = grid.classList.contains("inspector-collapsed");

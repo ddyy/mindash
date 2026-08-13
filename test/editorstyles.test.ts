@@ -22,16 +22,32 @@ test("a desktop-collapsed inspector is neutralized at the mobile breakpoint", ()
   );
   assert.match(
     mobileQuery,
-    /padding: 0 0\.75rem calc\(0\.75rem \+ env\(safe-area-inset-bottom, 0px\)\)/,
-    "the sheet restores safe-area-aware content padding without a top inset",
+    /padding: 0 0 env\(safe-area-inset-bottom, 0px\)/,
+    "the sheet keeps only safe-area bottom padding so its scrollbar reaches the edge",
   );
 });
 
-test("the mobile inspector rests as a row rather than hiding entirely", () => {
+test("the Structure rail is completely absent on mobile", () => {
+  assert.match(
+    mobileQuery,
+    /\.editor-grid \.outline-resizer,[\s\S]*\.editor-grid\.outline-collapsed \.outline-toggle,[\s\S]*\{ display: none; \}/,
+    "the mobile rule out-specifies the desktop collapsed-rail display rule",
+  );
+  assert.match(
+    mobileQuery,
+    /#outline, \.editor-grid\.outline-collapsed #outline \{ display: none; \}/,
+    "both expanded and persisted-collapsed Structure panels are hidden",
+  );
+});
+
+test("the mobile inspector keeps its handle but hides its scrollbar when minimized", () => {
   assert.match(mobileQuery, /\.sheet-handle \{[^}]*position: sticky[^}]*top: 0/, "the toggle rises as the sheet header");
-  assert.match(mobileQuery, /translateY\(calc\(100% - var\(--sheet-peek\)\)\)/, "the closed sheet leaves its header visible");
+  assert.match(mobileQuery, /translateY\(calc\(100% - var\(--sheet-peek\)\)\)/, "the closed sheet leaves its handle visible");
   assert.match(mobileQuery, /#inspector\.open[^{]*\{[^}]*translateY\(0\)/, "and slides fully open");
   assert.match(mobileQuery, /height: 44px; min-height: 44px/, "the handle has a full touch target");
+  assert.match(mobileQuery, /#inspector[^}]*overflow: hidden; scrollbar-gutter: auto;/, "the sheet itself never paints a scrollbar beside its title");
+  assert.match(mobileQuery, /#inspector:not\(\.open\) \{ scrollbar-width: none; \}/, "the minimized sheet has no scrollbar");
+  assert.match(mobileQuery, /#inspector:not\(\.open\)::\-webkit-scrollbar \{ display: none; \}/, "WebKit also hides the minimized scrollbar");
   assert.match(mobileQuery, /transform-origin: 50% 50%/, "the chevron rotates without shifting its box");
   assert.match(
     mobileQuery,
@@ -42,6 +58,28 @@ test("the mobile inspector rests as a row rather than hiding entirely", () => {
     mobileQuery,
     /#center::after \{[^}]*height: calc\([^}]*44px[^}]*safe-area-inset-bottom/,
     "a separate spacer reserves room for the collapsed handle",
+  );
+});
+
+test("the mobile Inspector scrollbar starts below its title", () => {
+  assert.match(
+    mobileQuery,
+    /#inspector\.open \.inspector-content \{[^}]*max-height: calc\(55vh - 44px - env[^}]*overflow-y: auto; scrollbar-gutter: stable;/,
+    "only the content below the 44px title handle scrolls",
+  );
+  assert.match(mobileQuery, /\.sheet-handle \{[^}]*width: 100%; margin: 0;/, "no margin separates the scrollbar from the title");
+});
+
+test("the mobile Inspector scrollbar hugs the right edge while content stays padded", () => {
+  assert.match(
+    mobileQuery,
+    /#inspector, \.editor-grid\.inspector-collapsed #inspector[\s\S]*padding: 0 0 env\(safe-area-inset-bottom, 0px\)/,
+    "the sheet does not inset its scroll container",
+  );
+  assert.match(
+    mobileQuery,
+    /#inspector\.open \.inspector-content \{[^}]*overflow-y: auto; scrollbar-gutter: stable;[^}]*padding: 0\.5rem 0\.75rem 0\.75rem;/,
+    "padding belongs to the scrolling content, inside the edge-aligned scrollbar",
   );
 });
 
@@ -110,6 +148,30 @@ test("the structure resize gutter disappears with the collapsed panel", () => {
   );
 });
 
+test("open Structure compensates its right padding for the scrollbar gutter", () => {
+  assert.match(
+    EDITOR_CSS,
+    /\.outline-content \{[\s\S]*padding: calc\(var\(--band-h\) \+ 0\.55rem\) max\(0px, calc\(0\.75rem - var\(--outline-chrome, 1px\)\)\) 0\.75rem 0\.75rem;/,
+    "the visible right inset matches the left inset across scrollbar styles",
+  );
+});
+
+test("the desktop Inspector has a bounded persistent resize grip", () => {
+  assert.match(EDITOR_CSS, /grid-template-columns: var\(--outline-w\) 6px minmax\(0, 1fr\) 6px var\(--inspector-w\)/);
+  assert.match(EDITOR_CSS, /\.inspector-resizer \{[^}]*cursor: col-resize/);
+  assert.match(EDITOR_CSS, /\.editor-grid\.inspector-collapsed \.inspector-resizer \{ visibility: hidden; cursor: default; \}/);
+  assert.match(EDITOR_JS, /const INSPECTOR_MIN = 260;[\s\S]*const INSPECTOR_MAX = 520;/);
+  assert.match(EDITOR_JS, /startW \+ startX - ev\.clientX/, "dragging the left edge left widens Inspector");
+  assert.match(EDITOR_JS, /localStorage\.setItem\("mindash-inspector-w", String\(w\)\)/, "width persists locally");
+  assert.match(EDITOR_JS, /bar\.addEventListener\("dblclick"[\s\S]*INSPECTOR_DEFAULT \+ "px"/, "double-click restores the default width");
+  assert.match(mobileQuery, /\.editor-grid \.inspector-resizer,[\s\S]*\{ display: none; \}/, "the resize grip is desktop-only");
+});
+
+test("resize gutters remain continuous through the panel title border", () => {
+  assert.doesNotMatch(EDITOR_CSS, /\.outline-resizer::before/);
+  assert.doesNotMatch(EDITOR_CSS, /\.inspector-resizer::before/);
+});
+
 test("inspector fields contrast with the inspector surface", () => {
   assert.match(
     EDITOR_CSS,
@@ -141,6 +203,20 @@ test("fit-screen previews show vertically expandable cards", () => {
     EDITOR_CSS,
     /#preview main\.fit-screen \.col > section\.widget\.expand \{ flex: 1 0 auto; \}/,
     "marked cards absorb the column's remaining preview height",
+  );
+});
+
+test("the preview stacks by pane width instead of browser width", () => {
+  assert.match(EDITOR_CSS, /#preview \{ container: dashboard-preview \/ inline-size; \}/);
+  assert.match(
+    EDITOR_CSS,
+    /@container dashboard-preview \(max-width: 760px\)[\s\S]*#preview \.row \{ grid-template-columns: 1fr; \}[\s\S]*#preview \.col \{ grid-column: 1 \/ -1; \}/,
+    "the dashboard's existing mobile threshold is measured against the preview pane",
+  );
+  assert.match(
+    EDITOR_CSS,
+    /@container dashboard-preview \(max-width: 760px\)[\s\S]*#preview \.col-resize \{ display: none; \}/,
+    "stacked columns do not expose an inapplicable horizontal resize grip",
   );
 });
 
@@ -195,5 +271,58 @@ test("selecting a Structure column highlights its preview column", () => {
     EDITOR_JS,
     /selected = \{ kind: "column", pageIdx, rowIdx: ri, colIdx: ci \};[\s\S]*renderAll\(\);[\s\S]*highlightPreview\(\);/,
     "Structure column selection updates both inspector and preview selection",
+  );
+});
+
+test("Structure widget type aligns under its name, not its icon", () => {
+  assert.match(EDITOR_JS, /row\.appendChild\(icon\);[\s\S]*text\.appendChild\(el\("span", "t", widgetTitle\(w\)\)\);[\s\S]*text\.appendChild\(el\("span", "ty", w\.type\)\)/);
+  assert.match(EDITOR_CSS, /\.ol-w-icon \{[^}]*flex: none/);
+});
+
+test("Structure delete stays on the widget row at narrow widths", () => {
+  assert.match(EDITOR_CSS, /\.ol-widget \{ flex-wrap: nowrap; \}/);
+  assert.match(EDITOR_CSS, /\.ol-widget > \.ol-del \{[^}]*flex: none;[^}]*white-space: nowrap;/);
+  assert.doesNotMatch(EDITOR_CSS, /@container \(max-width: 260px\)[\s\S]*\.ol-widget \{ flex-wrap: wrap/);
+});
+
+test("Structure rows, columns, and widgets are draggable", () => {
+  assert.match(EDITOR_JS, /rowHead\.draggable = true;[\s\S]*draggedRowIdx = ri;/, "row headers start row drags");
+  assert.match(EDITOR_JS, /head\.draggable = true;[\s\S]*draggedColRef = \{ ri, ci \};/, "column headers start column drags");
+  assert.match(EDITOR_JS, /row\.draggable = true;[\s\S]*draggedWid = w\.id;/, "widget items start widget drags");
+  assert.match(
+    EDITOR_JS,
+    /positionalDropTarget\([\s\S]*?row,[\s\S]*?moveWidgetRelative\(p\.wid, ri, ci, w\.id, position === "after"\)/,
+    "dropping on a widget inserts on the indicated side",
+  );
+  assert.match(EDITOR_CSS, /\.outline-content \.drop-hover \{ outline: 2px dashed var\(--accent\)/, "drop targets are visible");
+});
+
+test("dropping a Structure widget on a column header inserts it first", () => {
+  assert.match(
+    EDITOR_JS,
+    /dropTarget\([\s\S]*?head,[\s\S]*?p\.kind === "widget"[\s\S]*?moveWidgetTo\(p\.wid, ri, ci, col\.widgets\[0\]\?\.id \|\| null\)/,
+  );
+});
+
+test("Structure dragging previews placement in Structure and Preview before drop", () => {
+  assert.match(EDITOR_JS, /function previewRowBefore[\s\S]*#outline \.ol-row[\s\S]*#preview \.row/);
+  assert.match(EDITOR_JS, /function previewColumnBefore[\s\S]*#outline \.ol-col[\s\S]*#preview \.row/);
+  assert.match(EDITOR_JS, /if \(restorePreview && dragPreviewActive\)[\s\S]*renderOutline\(\);[\s\S]*refreshPreview\(\);/, "cancel restores both panes");
+  assert.match(EDITOR_JS, /dragPreviewActive = false;\s*onDrop\(payload\);/, "drop commits without first undoing the visual preview");
+});
+
+test("widget drag targets distinguish insertion above and below", () => {
+  assert.match(EDITOR_JS, /function positionalDropTarget[\s\S]*e\.clientY < box\.top \+ box\.height \/ 2[\s\S]*drop-before[\s\S]*drop-after/);
+  assert.match(EDITOR_JS, /moveWidgetRelative\(p\.wid, ri, ci, w\.id, position === "after"\)/);
+  assert.match(EDITOR_CSS, /\.ol-widget\.drop-before::before[\s\S]*#preview section\.widget\.drop-after::after/);
+  assert.doesNotMatch(EDITOR_JS, /positionalDropTarget\([\s\S]*?row,[\s\S]*?previewWidgetRelative\(p\.wid, w\.id/, "the cue does not move Structure widgets before drop");
+});
+
+test("selected Structure widgets restore all four rounded corners", () => {
+  assert.match(EDITOR_CSS, /\.ol-widget\.selected \{ border-radius: 5px; \}/);
+  assert.ok(
+    EDITOR_CSS.indexOf(".ol-widget.selected { border-radius: 5px; }") >
+      EDITOR_CSS.indexOf(".ol-widget + .ol-widget"),
+    "the selected radius must follow and override the connected-list corners",
   );
 });

@@ -67,7 +67,7 @@ export const EDITOR_CSS = /* css */ `
    hand-matched 2.1rem) and they missed each other by ~2px. */
 .editor-grid {
   --band-h: 2.1rem; position: relative; display: grid;
-  grid-template-columns: var(--outline-w) 6px minmax(0, 1fr) var(--inspector-w);
+  grid-template-columns: var(--outline-w) 6px minmax(0, 1fr) 6px var(--inspector-w);
   flex: 1; min-height: 0;
 }
 @media (min-width: 901px) {
@@ -94,7 +94,11 @@ export const EDITOR_CSS = /* css */ `
   .outline-content {
     box-sizing: border-box;
     width: calc(var(--outline-expanded-w, 230px) - var(--outline-chrome, 1px));
-    min-height: 100%; padding: calc(var(--band-h) + 0.55rem) 0.75rem 0.75rem;
+    /* The scrollbar gutter already creates space on the right. Subtract
+       it from the content inset so the visible edge matches the 0.75rem
+       left inset instead of looking like two paddings side by side. */
+    min-height: 100%;
+    padding: calc(var(--band-h) + 0.55rem) max(0px, calc(0.75rem - var(--outline-chrome, 1px))) 0.75rem 0.75rem;
     transform: translateX(0);
     transition: transform 0.2s ease;
   }
@@ -167,16 +171,6 @@ export const EDITOR_CSS = /* css */ `
 .editor-grid.outline-collapsed #outline { padding: 0; overflow: hidden; }
 .outline-resizer { position: relative; cursor: col-resize; background: transparent; border-right: 1px solid var(--border); }
 .outline-resizer:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); }
-/* the header rule crosses the gutter too: without this it stopped at the
-   structure panel's edge and left a 6px notch short of the canvas */
-.outline-resizer::before {
-  content: ""; position: absolute; left: 0; right: 0; top: 0;
-  /* the global star reset does not match pseudo-elements - without this
-     the border sits a pixel below the bands it is joining */
-  box-sizing: border-box;
-  height: var(--band-h); border-bottom: 1px solid var(--border);
-  pointer-events: none;
-}
 /* Mirror of the inspector's: each panel carries its own toggle at its
    top outer corner, in both states. It used to sit in the top bar beside
    the page tabs, where it read as a fourth tab. */
@@ -209,6 +203,12 @@ export const EDITOR_CSS = /* css */ `
    the panel, so the handle now says so by dropping the resize cursor.
    Double-click still toggles it back open. */
 .editor-grid.outline-collapsed .outline-resizer { visibility: hidden; cursor: default; }
+.inspector-resizer {
+  position: relative; cursor: col-resize; background: transparent;
+  border-left: 1px solid var(--border);
+}
+.inspector-resizer:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+.editor-grid.inspector-collapsed .inspector-resizer { visibility: hidden; cursor: default; }
 .outline-toggle:hover { color: var(--accent); border-color: var(--border); }
 #outline, #inspector { overflow-y: auto; padding: 0.75rem; border-right: 1px solid var(--border); }
 /* Reserve the gutter whether or not it is in use. Besides keeping the
@@ -219,6 +219,7 @@ export const EDITOR_CSS = /* css */ `
 /* even padding all round: the canvas gets the same breathing room above
    it as it has at its sides and foot */
 #center { overflow-y: auto; padding: 0.75rem 1rem; background: var(--bg); }
+#preview { container: dashboard-preview / inline-size; }
 #preview main { padding: 0; max-width: none; }
 /* Fit-screen rows get a representative viewport independently rather than
    sharing one short editor viewport. Editor handles take explicit auto
@@ -241,6 +242,24 @@ export const EDITOR_CSS = /* css */ `
   #preview main.fit-screen .col > section.widget > h2 {
     position: static; margin: 0 0 0.6rem; padding: 0;
   }
+}
+/* The rendered dashboard normally stacks at the viewport's 760px
+   breakpoint. In the editor the canvas is only the centre pane, so use
+   that pane's width instead: collapsing or resizing either side panel can
+   now produce the same layout the dashboard will have at that width. */
+@container dashboard-preview (max-width: 760px) {
+  #preview .row { grid-template-columns: 1fr; }
+  #preview .col { grid-column: 1 / -1; }
+  #preview .col-resize { display: none; }
+  #preview main.fit-screen .row {
+    flex: none !important; min-height: 0;
+    grid-template-rows: auto; grid-auto-rows: auto;
+  }
+  #preview main.fit-screen .col { overflow: visible; min-height: 0; }
+  #preview main.fit-screen .col > section.widget {
+    flex: 0 0 auto; min-height: auto; overflow: visible;
+  }
+  #preview main.fit-screen .col > section.widget.expand { flex: 0 0 auto; }
 }
 /* visible containers: the page, its rows, and their columns all read as
    structure in the editor - one nesting level per border weight */
@@ -350,24 +369,34 @@ export const EDITOR_CSS = /* css */ `
 
 .ol-page { margin-bottom: 0.5rem; }
 .ol-col { margin: 0.35rem 0 0.35rem 0; padding-left: 0.5rem; border-left: 2px solid var(--border); }
-.ol-col-head, .ol-widget { display: flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.2rem; border-radius: 5px; }
+.ol-col-head, .ol-widget { display: flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.2rem; border-radius: 5px; cursor: grab; }
+.ol-col-head.dragging, .ol-widget.dragging { opacity: 0.4; cursor: grabbing; }
+.outline-content .drop-hover { outline: 2px dashed var(--accent); outline-offset: 1px; }
+.ol-widget.drop-before, .ol-widget.drop-after,
+#preview section.widget.drop-before, #preview section.widget.drop-after { position: relative; }
+.ol-widget.drop-before::before, .ol-widget.drop-after::after,
+#preview section.widget.drop-before::before, #preview section.widget.drop-after::after {
+  content: ""; position: absolute; z-index: 20; left: 0; right: 0;
+  height: 3px; border-radius: 999px; background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.ol-widget.drop-before::before, #preview section.widget.drop-before::before { top: -3px; }
+.ol-widget.drop-after::after, #preview section.widget.drop-after::after { bottom: -3px; }
 /* widgets in a column are separate items, not a paragraph: a rule and a
    little air between them so the eye can count them at a glance */
 .ol-widget { padding-top: 0.3rem; padding-bottom: 0.3rem; }
-/* The panel is drag-resizable, so "too narrow" is a question about the
-   PANEL, not the viewport - hence a container query. Below the width
-   where a title and five buttons can share a line, the buttons drop to
-   their own row and the title gets the full width instead of eliding to
-   "Welc...". */
-#outline { container-type: inline-size; }
-@container (max-width: 260px) {
-  .ol-widget { flex-wrap: wrap; row-gap: 0.2rem; }
-  .ol-widget .ol-w-text { flex: 1 1 100%; }
-}
+/* The old narrow-panel layout wrapped five movement buttons onto another
+   line. With movement delegated to drag/keyboard/Inspector, each widget
+   has only Delete: keep it pinned right and ellipsize the name instead of
+   shrinking all of the hierarchy's type. */
+.ol-widget { flex-wrap: nowrap; }
+.ol-widget > .ol-del { flex: none; align-self: flex-start; white-space: nowrap; }
 .ol-widget + .ol-widget { border-top: 1px solid var(--border); border-top-left-radius: 0; border-top-right-radius: 0; }
+.ol-widget.selected { border-radius: 5px; }
 .ol-col-head .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ol-widget { cursor: pointer; }
+.ol-widget { cursor: grab; }
 .ol-widget.selected, .ol-col-head.selected { background: var(--card); outline: 1px solid var(--accent); }
+.ol-w-icon { flex: none; align-self: flex-start; line-height: 1.25; }
 .ol-w-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.25; }
 .ol-widget .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ol-widget .ty { color: var(--muted); font-size: 0.65rem; }
@@ -493,7 +522,12 @@ dialog h2 { margin: 0 0 0.6rem; font-size: 0.95rem; }
   .editor-grid, .editor-grid.outline-collapsed { grid-template-columns: 1fr; grid-template-rows: 1fr; }
   /* the inspector is a bottom sheet here, opened by selection - there is
      no side column to collapse, so the desktop rail toggles go */
-  .outline-resizer, .outline-toggle, .inspector-toggle { display: none; }
+  .editor-grid .outline-resizer,
+  .editor-grid .inspector-resizer,
+  .editor-grid .outline-toggle,
+  .editor-grid.outline-collapsed .outline-toggle,
+  .editor-grid .inspector-toggle,
+  .editor-grid.inspector-collapsed .inspector-toggle { display: none; }
   /* The sheet header is also its collapsed bottom handle. Sticky keeps it
      at the sheet's top while its fields scroll; opening the sheet carries
      the whole header upward in the conventional bottom-sheet pattern. */
@@ -502,7 +536,7 @@ dialog h2 { margin: 0 0 0.6rem; font-size: 0.95rem; }
     display: flex; align-items: center; justify-content: center; gap: 0.4rem;
     position: sticky; z-index: 2; top: 0;
     height: 44px; min-height: 44px;
-    width: calc(100% + 1.5rem); margin: 0 -0.75rem 0.5rem;
+    width: 100%; margin: 0;
     padding: 0 0.75rem; background: var(--bg);
     border: 0; border-bottom: 1px solid var(--border); border-radius: 0;
     color: var(--muted); font-size: 0.78rem;
@@ -556,17 +590,15 @@ dialog h2 { margin: 0 0 0.6rem; font-size: 0.95rem; }
   .editor-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-end; }
   #preview .row { grid-template-columns: 1fr; }
   /* The inspector is a bottom sheet here. It never hides completely: it
-     RESTS AS A ROW along the bottom edge - the section heading peeking
-     above the fold - and slides up on selection or tap. A desktop
+     rests as a handle along the bottom edge and slides up on selection
+     or tap. A desktop
      collapse (persisted in localStorage) must not carry over: there is
-     no toggle at this width, so visibility:hidden would strand the panel
-     with no way back. Out-specify it and let the peek row stand in for
-     "collapsed" instead. */
+     no desktop rail at this width, so the sheet owns the collapsed state. */
   #inspector, .editor-grid.inspector-collapsed #inspector {
     --sheet-peek: calc(44px + env(safe-area-inset-bottom, 0px));
     position: fixed; left: 0; right: 0; bottom: 0; max-height: 55vh;
-    visibility: visible; overflow-y: auto;
-    padding: 0 0.75rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    visibility: visible; overflow: hidden; scrollbar-gutter: auto;
+    padding: 0 0 env(safe-area-inset-bottom, 0px);
     /* the same surface the inspector is on desktop - the sheet is that
        panel, not a dialog on top of it */
     background: var(--bg); border-top: 1px solid var(--border); border-left: 0;
@@ -575,8 +607,18 @@ dialog h2 { margin: 0 0 0.6rem; font-size: 0.95rem; }
     transition: transform 0.18s ease; cursor: pointer;
   }
   #inspector.open, .editor-grid.inspector-collapsed #inspector.open { transform: translateY(0); cursor: auto; }
-  /* Closed, only the header and safe area remain visible. */
-  #inspector:not(.open) { overflow: hidden; }
+  /* Scroll only the fields below the fixed title handle. If the sheet
+     itself scrolls, the browser paints its scrollbar beside the title. */
+  #inspector.open .inspector-content {
+    max-height: calc(55vh - 44px - env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box; overflow-y: auto; scrollbar-gutter: stable;
+    padding: 0.5rem 0.75rem 0.75rem;
+  }
+  /* Closed, only the handle and safe area remain visible. Suppress the
+     stable desktop scrollbar gutter too, so no scrollbar track peeks out
+     beside the minimized handle. */
+  #inspector:not(.open) { scrollbar-width: none; }
+  #inspector:not(.open)::-webkit-scrollbar { display: none; }
   #inspector:not(.open) .sheet-handle {
     height: var(--sheet-peek); padding-bottom: env(safe-area-inset-bottom, 0px);
   }
