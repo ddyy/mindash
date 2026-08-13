@@ -195,6 +195,13 @@ export const EDITOR_CSS = /* css */ `
   position: absolute; top: 0.35rem; right: 0.45rem; opacity: 0;
   pointer-events: auto; padding: 0 0.35rem; font-size: 0.72rem; line-height: 1.5;
 }
+/* The button floats over the card, so nothing in normal flow knows it is
+   there: a title long enough to reach the right edge ran straight under
+   it. The heading (and a description, which wraps to the same corner)
+   keeps a lane clear for it - only in the preview, since the live
+   dashboard has no delete button to avoid. */
+#preview section.widget > h2,
+#preview section.widget > .widget-desc { padding-right: 1.7rem; }
 #preview section.widget:hover .qd { opacity: 1; }
 .qd:hover { background: hsl(0 70% 52%); border-color: hsl(0 70% 52%); color: #fff; }
 .row-handle, .col-handle { position: relative; cursor: grab; }
