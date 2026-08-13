@@ -85,7 +85,7 @@ ok(/<td class="log-trigger">cron<\/td>/.test(page1), "sweep refreshes are labele
 // wide screens) carrying trigger, duration and the message.
 const detailRows = (page1.match(/<tr class="log-detail-row/g) ?? []).length;
 ok(detailRows === countRows(page1), "one detail row per entry", `${detailRows} details vs ${countRows(page1)} entries`);
-ok(/<tr class="log-detail-row[^"]*"><td colspan="5">.*?<span class="fold-only">manual/.test(page1), "detail row folds the trigger for narrow screens");
+ok(/<tr class="log-detail-row[^"]*"><td colspan="6">[\s\S]*?<span class="fold-only">[^<]*manual/.test(page1), "detail row folds page and trigger for narrow screens");
 ok(/<span class="detail-msg">upstream 503 from example.test<\/span><\/td><\/tr>/.test(page1), "detail row carries the error message");
 // storage stats: 153 seeded refresh rows (150 + 3), spanning ~2.5h
 ok(/154 refresh entries stored,/.test(page1), "stats report how much history is stored", /(\d[\d,]*) refresh entr[^<]*/.exec(page1)?.[0]);
@@ -93,10 +93,10 @@ ok(/spanning under a day/.test(page1), "stats report the span in days");
 ok(/kept 7 days/.test(page1), "stats name the retention window");
 ok(/<th class="log-time">Time \(UTC\)<\/th>/.test(page1), "table has labeled column headers");
 ok(
-  ["log-time", "log-status", "log-widget", "log-trigger", "log-dur"].every((c) =>
+  ["log-time", "log-status", "log-widget", "log-page", "log-trigger", "log-dur"].every((c) =>
     new RegExp(`<th class="${c}">`).test(page1),
   ),
-  "all five column headers present (message folds into its own row, not a column)",
+  "all six column headers present (message folds into its own row, not a column)",
 );
 ok(countRows(page1) === 100, "first page holds one page of entries", `got ${countRows(page1)}`);
 ok(/<th class="log-time">Time \(UTC\)<\/th>/.test(page1), "headers survive the extra column");
@@ -127,6 +127,20 @@ ok(Boolean(pickable), "picker lists loggable widgets");
 const picked = await get(`/settings/log?widget=${pickable}`);
 ok(new RegExp(`<option value="${pickable}" selected>`).test(picked), "the active widget is preselected in the picker");
 ok(!/back to settings/.test(oneWidget), "no redundant back-to-settings link");
+
+// A whole page can be selected, and it filters to exactly that page's widgets.
+const firstPage = /<optgroup label="([^"]+)"/.exec(page1)?.[1] ?? "";
+ok(Boolean(firstPage), "picker groups widgets by page");
+ok(new RegExp(`<option value="page:${firstPage}"`).test(page1), "each group offers an all-on-this-page option");
+const byPage = await get(`/settings/log?widget=page:${encodeURIComponent(firstPage)}`);
+ok(new RegExp(`<option value="page:${firstPage}" selected>`).test(byPage), "the page selection stays selected");
+ok(/<th class="log-page">Page<\/th>/.test(byPage), "the table has a Page column");
+const pagesShown = [...byPage.matchAll(/<td class="log-page">(?:<a[^>]*>)?([^<]+)/g)].map((m) => m[1].trim());
+ok(pagesShown.length > 0 && pagesShown.every((p) => p === firstPage), "every row belongs to the selected page", pagesShown.slice(0, 4).join(","));
+ok(new RegExp(`stored for ${firstPage}`).test(byPage), "the stats line names the page");
+// a page with no widgets must show nothing, not everything
+const emptyPage = await get("/settings/log?widget=page:NoSuchPage");
+ok(countRows(emptyPage) === 0, "an unknown page filters to nothing", String(countRows(emptyPage)));
 ok(!/action="\/auth\/logout"/.test(oneWidget), "no logout button on the read-only log");
 
 const combined = await get(`/settings/log?widget=${ids[0]}&fail=1`);

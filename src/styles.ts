@@ -477,6 +477,11 @@ section.access[id] { scroll-margin-top: 1rem; }
 .log-table .log-widget { white-space: nowrap; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; }
 .log-table .log-dur { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
 .log-table .log-trigger { white-space: nowrap; color: var(--muted); }
+/* which page the widget sits on today - the tie-breaker when two cards
+   share a title ("Crypto" on Home and on Everything) */
+.log-table .log-page { white-space: nowrap; }
+.log-table .log-page a { color: var(--muted); text-decoration: none; }
+.log-table .log-page a:hover { color: var(--accent); text-decoration: underline; }
 .meta { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 0.1rem; }
 .meta a.quiet { color: var(--muted); text-decoration: none; }
 .meta a.quiet:hover { color: var(--accent); }

@@ -398,7 +398,12 @@ const LOG_PAGE_SIZE = 100;
 
 export async function logPage(env: Env, url: URL): Promise<Response> {
   const failOnly = url.searchParams.get("fail") === "1";
-  const widgetId = url.searchParams.get("widget") ?? "";
+  // One selector, two kinds of value: a widget instance id, or
+  // "page:<name>" for every widget on that page. Same param either way,
+  // so the cursor and the failures toggle compose with both.
+  const selection = url.searchParams.get("widget") ?? "";
+  const pageName = selection.startsWith("page:") ? selection.slice(5) : "";
+  const widgetId = pageName ? "" : selection;
   // Keyset cursor: "older" pages ask for entries strictly before the last
   // row shown. Correct while new rows land (page numbers would drift) and
   // it stays one indexed range scan.
@@ -406,11 +411,24 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
   const before = Number.isSafeInteger(beforeRaw) && beforeRaw > 0 ? beforeRaw : null;
   const cfg = await getConfig(env);
   const byId = new Map(cfg.widgets.map((w) => [w.id, w]));
+  // Which page each widget sits on TODAY - entries logged before a card
+  // was moved therefore show its current page, which is what the column
+  // header says.
+  const pageOf = new Map<string, string>();
+  for (const p of cfg.pages) {
+    for (const r of p.rows) for (const c of r.columns) for (const w of c.widgets) pageOf.set(w.id, p.name);
+  }
+  const pageIds = pageName
+    ? cfg.pages
+        .filter((p) => p.name === pageName)
+        .flatMap((p) => p.rows.flatMap((r) => r.columns.flatMap((c) => c.widgets.map((w) => w.id))))
+    : [];
 
   interface Entry {
     at: number;
     widgetId: string;
     widget: string;
+    page: string;
     type: string;
     ok: boolean;
     trigger: string; // cron | manual | push
@@ -421,12 +439,24 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
   // One extra row per source detects "there is more" after the merge.
   const limit = LOG_PAGE_SIZE + 1;
 
+  // A page selection with no widgets still has to filter to NOTHING
+  // rather than falling through to "all" - an emptied page shows an empty
+  // log, not the whole instance.
+  const idFilter = widgetId ? [widgetId] : pageName ? pageIds : [];
+  const idPlaceholders = idFilter.map((_, i) => `?${i + 1}`).join(",");
+  const idClause = widgetId
+    ? "instance_id = ?1"
+    : pageName
+      ? idFilter.length > 0
+        ? `instance_id IN (${idPlaceholders})`
+        : "1 = 0"
+      : "";
   const fetchWhere = [
     failOnly ? "ok = 0" : "",
-    widgetId ? "instance_id = ?1" : "",
-    before ? `at < ?${widgetId ? 2 : 1}` : "",
+    idClause,
+    before ? `at < ?${idFilter.length + 1}` : "",
   ].filter(Boolean);
-  const fetchBinds = [...(widgetId ? [widgetId] : []), ...(before ? [before] : [])];
+  const fetchBinds = [...idFilter, ...(before ? [before] : [])];
   const { results: fetches } = await env.DB
     .prepare(
       `SELECT instance_id, at, ok, duration_ms, error, trigger_kind FROM refresh_log
@@ -441,6 +471,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
       at: r.at,
       widgetId: r.instance_id,
       widget: w ? w.title : "(removed widget)",
+      page: pageOf.get(r.instance_id) ?? "-",
       type: w?.type ?? "?",
       ok: r.ok === 1,
       trigger: r.trigger_kind,
@@ -451,8 +482,8 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
 
   const runWhere = [
     "(completed_at IS NOT NULL OR timed_out_at IS NOT NULL)",
-    ...(widgetId ? ["instance_id = ?1"] : []),
-    ...(before ? [`COALESCE(completed_at, timed_out_at) < ?${widgetId ? 2 : 1}`] : []),
+    ...(idClause ? [idClause] : []),
+    ...(before ? [`COALESCE(completed_at, timed_out_at) < ?${idFilter.length + 1}`] : []),
   ];
   const { results: runs } = await env.DB
     .prepare(
@@ -475,6 +506,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
       at: r.completed_at ?? r.timed_out_at ?? 0,
       widgetId: r.instance_id,
       widget: w ? w.title : "(removed widget)",
+      page: pageOf.get(r.instance_id) ?? "-",
       type: w?.type ?? "heartbeat",
       ok,
       trigger: "push",
@@ -487,8 +519,8 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
   // timeline; only level=error counts as a failure.
   const msgWhere = [
     ...(failOnly ? ["level = 'error'"] : []),
-    ...(widgetId ? ["instance_id = ?1"] : []),
-    ...(before ? [`created_at < ?${widgetId ? 2 : 1}`] : []),
+    ...(idClause ? [idClause] : []),
+    ...(before ? [`created_at < ?${idFilter.length + 1}`] : []),
   ];
   const { results: messages } = await env.DB
     .prepare(
@@ -504,6 +536,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
       at: r.created_at,
       widgetId: r.instance_id,
       widget: w ? w.title : "(removed widget)",
+      page: pageOf.get(r.instance_id) ?? "-",
       type: w?.type ?? "log",
       ok: r.level !== "error",
       trigger: "push",
@@ -535,8 +568,8 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
   // Follows the widget filter: numbers sitting above a filtered table
   // must describe that same slice, not the whole store.
   const stats = await env.DB
-    .prepare(`SELECT COUNT(*) AS n, MIN(at) AS oldest FROM refresh_log${widgetId ? " WHERE instance_id = ?1" : ""}`)
-    .bind(...(widgetId ? [widgetId] : []))
+    .prepare(`SELECT COUNT(*) AS n, MIN(at) AS oldest FROM refresh_log${idClause ? ` WHERE ${idClause}` : ""}`)
+    .bind(...idFilter)
     .first<{ n: number; oldest: number | null }>();
   const retentionDays = await logRetentionDays(env);
   const stored = stats?.n ?? 0;
@@ -563,6 +596,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
           <option value="">All widgets</option>
           ${byPage.map(
             (g) => html`<optgroup label="${g.page}">
+            <option value="page:${g.page}"${pageName === g.page ? new SafeHtml(" selected") : null}>All on ${g.page}</option>
             ${g.widgets.map(
               (w) => html`<option value="${w.id}"${widgetId === w.id ? new SafeHtml(" selected") : null}>${w.title} (${w.type})</option>`,
             )}
@@ -580,9 +614,9 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
       <p class="meta log-stats">
         ${
           stored === 0
-            ? html`no refresh history stored${widgetId ? " for this widget" : ""} yet`
+            ? html`no refresh history stored${widgetId ? " for this widget" : pageName ? ` for ${pageName}` : ""} yet`
             : html`${stored.toLocaleString("en-US")} refresh ${stored === 1 ? "entry" : "entries"} stored${
-                widgetId ? " for this widget" : ""
+                widgetId ? " for this widget" : pageName ? ` for ${pageName}` : ""
               }, spanning ${spanDays < 1 ? "under a day" : `${spanDays.toFixed(1)} days`}`
         } · kept ${retentionDays} ${retentionDays === 1 ? "day" : "days"}
       </p>
@@ -596,6 +630,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
             <th class="log-time">Time (UTC)</th>
             <th class="log-status">Result</th>
             <th class="log-widget">Widget</th>
+            <th class="log-page">Page</th>
             <th class="log-trigger">Trigger</th>
             <th class="log-dur">Took</th>
           </tr>
@@ -608,10 +643,13 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
               <td class="log-widget">${
                 widgetId ? e.widget : html`<a href="${href({ widget: e.widgetId, before: 0 })}">${e.widget}</a>`
               } <span class="meta">${e.type}</span></td>
+              <td class="log-page">${
+                e.page === "-" ? html`<span class="meta">-</span>` : html`<a href="${href({ widget: `page:${e.page}`, before: 0 })}">${e.page}</a>`
+              }</td>
               <td class="log-trigger">${e.trigger}</td>
               <td class="log-dur">${dur(e.durationMs)}</td>
             </tr>
-            <tr class="log-detail-row${e.error ? " has-detail" : ""} ${e.ok ? "log-ok" : "log-fail"}"><td colspan="5">${
+            <tr class="log-detail-row${e.error ? " has-detail" : ""} ${e.ok ? "log-ok" : "log-fail"}"><td colspan="6">${
               // The message never rides in a column: it is the longest,
               // least predictable field, and a nowrap cell either crushes
               // it or stretches the table. It gets its own nested line
@@ -619,7 +657,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
               // trigger and duration here, since those columns are hidden
               // there - hence the two spans rather than one string.
               null
-            }<span class="fold-only">${[e.trigger, dur(e.durationMs)].filter(Boolean).join(" \u00b7 ")}</span>${
+            }<span class="fold-only">${[e.page === "-" ? "" : e.page, e.trigger, dur(e.durationMs)].filter(Boolean).join(" \u00b7 ")}</span>${
               e.error ? html`<span class="detail-msg">${e.error}</span>` : null
             }</td></tr>`,
           )}
