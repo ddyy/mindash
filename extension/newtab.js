@@ -1,7 +1,31 @@
 // New tab: redirect to the stored dashboard URL; first run shows the
-// one-field setup instead. location.replace keeps this page out of tab
-// history, and the omnibox keeps focus so typing still searches.
+// one-field setup instead.
 "use strict";
+
+// WHO initiates the navigation decides where the cursor ends up. A
+// renderer-initiated one (location.replace) moves focus into the page, so
+// the address bar loses the caret Chrome gave it when the tab opened and
+// you cannot just start typing. Asking the BROWSER to navigate the tab
+// leaves that focus alone. Same destination, same lack of a history entry
+// - only the initiator differs.
+//
+// tabs.update on the extension's own tab needs no "tabs" permission; that
+// permission only gates reading url/title/favIconUrl off other tabs. The
+// fallback covers runtimes without chrome.tabs (Firefox temporary
+// add-ons) and the case where this page somehow isn't in a tab.
+function go(target) {
+  try {
+    if (!chrome.tabs?.getCurrent) return void location.replace(target);
+    chrome.tabs.getCurrent((tab) => {
+      if (chrome.runtime.lastError || !tab) return void location.replace(target);
+      chrome.tabs.update(tab.id, { url: target }, () => {
+        if (chrome.runtime.lastError) location.replace(target);
+      });
+    });
+  } catch {
+    location.replace(target);
+  }
+}
 
 function validUrl(raw) {
   try {
@@ -30,7 +54,7 @@ function whenReady(fn) {
 chrome.storage.sync.get("url", ({ url }) => {
   const target = url && validUrl(url);
   if (target) {
-    location.replace(target);
+    go(target);
     return;
   }
   whenReady(() => {
@@ -44,7 +68,9 @@ chrome.storage.sync.get("url", ({ url }) => {
         document.getElementById("err").textContent = "Enter an https:// URL (or http://localhost for dev).";
         return;
       }
-      chrome.storage.sync.set({ url: ok }, () => location.replace(ok));
+      // Focus is already in the page here (the user just typed and
+      // submitted), so this one is only about staying consistent.
+      chrome.storage.sync.set({ url: ok }, () => go(ok));
     });
   });
 });
