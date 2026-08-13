@@ -61,3 +61,21 @@ test("expand: offered on every widget type, in the main form", () => {
   // layout is a normal thing to reach for - not buried under Advanced
   assert.notEqual(field!.advanced, true);
 });
+
+// Four card shells render sections - pull, static, log, heartbeat - and
+// the pull one built its class string separately, so it silently dropped
+// the flag while the other three carried it. Cover every shell.
+test("expand: reaches pull, static, and push cards alike", async () => {
+  const { runtime } = validateDoc({
+    pages: [{ name: "Home", rows: [{ columns: [{ width: "full", widgets: [
+      { id: "w_1", name: "feed", type: "rss", title: "Feed", urls: ["https://example.com/f.xml"], refresh_interval: "1h", expand: true },
+      { id: "w_2", name: "noted", type: "note", title: "Note", text: "x", expand: true },
+      { id: "w_3", name: "lines", type: "log", title: "Log", expand: true },
+      { id: "w_4", name: "beat", type: "heartbeat", title: "Beat", expect_every: "1h", grace: "10m", expand: true },
+    ] }] }] }],
+  });
+  const out = (await renderMain(fakeEnv(), runtime, 0)).value;
+  for (const name of ["feed", "noted", "lines", "beat"]) {
+    assert.match(out, new RegExp(`class="widget[^"]*expand[^"]*" data-widget="${name}"`), `${name} lost the flag`);
+  }
+});
