@@ -230,17 +230,41 @@ const appHandler = {
         });
       }
       if (url.pathname === "/llms.txt") {
+        // llms.txt is Markdown by spec: an H1, a blockquote summary, then
+        // sections of LINKS - a prose-only file gives a reader nothing to
+        // follow. The page list is this instance's own public pages, so
+        // the file describes the dashboard that exists rather than the
+        // software in general.
+        const { getConfig } = await import("./config");
+        const { pageSlugs } = await import("./render");
+        const cfg = await getConfig(env);
+        const slugs = pageSlugs(cfg);
+        const pageLinks = cfg.pages
+          .map((p, i) => ({ p, i }))
+          .filter(({ p }) => p.publicView)
+          .map(({ p, i }) => {
+            const loc = i === 0 ? `${url.origin}/` : `${url.origin}/p/${slugs[i]}`;
+            return `- [${p.name}](${loc})${p.description ? `: ${p.description}` : ""}`;
+          });
         return new Response(
           [
-            "# mindash",
+            `# ${cfg.theme.title ?? "mindash"}`,
             "",
-            "A personal Glance-style dashboard on a Cloudflare Worker. Public pages",
-            "are server-rendered HTML at / and /p/<slug>.",
+            "> A personal, Glance-style dashboard running on a single Cloudflare",
+            "> Worker: server-rendered HTML, no client framework, and an MCP server",
+            "> so agents can read and edit it the same way a person does.",
+            "",
+            "## Pages",
+            "",
+            ...(pageLinks.length > 0 ? pageLinks : ["- (no public pages on this instance)"]),
             "",
             "## For agents",
-            "This instance runs an MCP server (Streamable HTTP) at /mcp - OAuth 2.1",
-            "with dynamic client registration. Tools cover reading and editing the",
-            "dashboard's runtime config. Source: https://github.com/ddyy/mindash",
+            "",
+            `- [MCP endpoint](${url.origin}/mcp): Streamable HTTP, OAuth 2.1 with dynamic`,
+            "  client registration. Tools read and edit the dashboard's runtime config.",
+            `- [robots.txt](${url.origin}/robots.txt): what is crawlable here.`,
+            `- [sitemap.xml](${url.origin}/sitemap.xml): pages this instance offers for indexing.`,
+            "- [Source](https://github.com/ddyy/mindash): the Worker that serves this page.",
             "",
           ].join("\n"),
           { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=86400" } },

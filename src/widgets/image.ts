@@ -68,8 +68,15 @@ function parseLink(v: unknown, where: string): string | undefined {
 
 export function render(data: ImageData, cfg: ImageWidget): SafeHtml {
   const style = `${cfg.height ? `height:${cfg.height}px;` : ""}object-fit:${cfg.fit};`;
+  // The image carries no alt: what it shows changes every refresh (a
+  // webcam, today's comic), so any fixed text would be a guess, and the
+  // card's own heading already names it. That leaves a linked image with
+  // no accessible name at all, which is a link a screen reader cannot
+  // announce - so the LINK borrows the card's title instead.
   const img = html`<img class="image-widget" src="${data.img}" alt="" loading="lazy" style="${style}">`;
-  return cfg.link ? html`<a class="image-link" href="${cfg.link}" rel="noreferrer">${img}</a>` : img;
+  return cfg.link
+    ? html`<a class="image-link" href="${cfg.link}" rel="noreferrer" aria-label="${cfg.title}">${img}</a>`
+    : img;
 }
 
 export const def: WidgetDef<ImageWidget, ImageData> = {
