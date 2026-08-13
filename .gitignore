@@ -4,3 +4,4 @@ node_modules/
 .test-dist/
 .int-state/
 extension.zip
+.DS_Store
