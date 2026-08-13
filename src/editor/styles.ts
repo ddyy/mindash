@@ -220,31 +220,16 @@ export const EDITOR_CSS = /* css */ `
    it as it has at its sides and foot */
 #center { overflow-y: auto; padding: 0.75rem 1rem; background: var(--bg); }
 #preview main { padding: 0; max-width: none; }
-/* Give fit-screen drafts a bounded viewport of their own. This lets cards
-   marked expand visibly absorb leftover height, while the editor's centre
-   pane remains the outer scroller. The decoration handles consume a little
-   room, so this is a faithful layout preview rather than pixel identity. */
-@media (min-width: 901px) {
-  #preview main.fit-screen {
-    height: clamp(30rem, calc(100dvh - 11rem), 48rem);
-    min-height: 30rem; overflow: hidden;
-  }
-  #preview main.fit-screen .row {
-    flex: 1 1 0 !important; min-height: 0;
-    grid-template-rows: minmax(0, 1fr); grid-auto-rows: minmax(0, 1fr);
-  }
-  #preview main.fit-screen .row:has(> .row-title) { grid-template-rows: auto minmax(0, 1fr); }
-  #preview main.fit-screen .col { overflow: hidden; min-height: 0; }
-  #preview main.fit-screen .col > section.widget {
-    flex: 0 1 auto; min-height: 0; overflow-y: auto;
-  }
-  #preview main.fit-screen .col > section.widget.expand { flex: 1 1 0; }
-  /* Sticky live-page headings obscure editor chrome and are unnecessary
-     in the bounded preview; expansion itself remains accurate. */
-  #preview main.fit-screen .col > section.widget > h2 {
-    position: static; margin: 0 0 0.6rem; padding: 0;
-  }
-}
+/* The editor injects page, row, and column handles that are not present on
+   the live dashboard. Reusing fit-screen's bounded track algorithm around
+   those extra grid items can crush ordinary cards, so the preview remains
+   natural-height. Marked cards still show a representative expanded size
+   without changing the allocation of their siblings. */
+#preview main.fit-screen .row { flex: none !important; grid-template-rows: none; grid-auto-rows: auto; }
+#preview main.fit-screen .col { overflow: visible; }
+#preview main.fit-screen .col > section.widget { flex: none; min-height: auto; overflow: visible; }
+#preview main.fit-screen .col > section.widget.expand { min-height: 18rem; }
+#preview main.fit-screen .col > section.widget > h2 { position: static; margin: 0 0 0.6rem; padding: 0; }
 /* visible containers: the page, its rows, and their columns all read as
    structure in the editor - one nesting level per border weight */
 #preview main.page-frame {

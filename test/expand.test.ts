@@ -50,7 +50,7 @@ test("expand: only the marked card takes leftover height, in both layouts", () =
     !/main:not\(\.fit-screen\) \.row-fill \.col > section\.widget \{ flex: 1 1 auto; \}/.test(CSS),
     "the old rule stretched every card in a filling row",
   );
-  assert.match(CSS, /main\.fit-screen \.col > section\.widget\.expand \{ flex: 1 1 0; \}/);
+  assert.match(CSS, /main\.fit-screen \.col > section\.widget\.expand \{ flex: 1 1 auto; \}/);
   assert.match(CSS, /main\.fit-screen \.col > section\.widget \{\s*flex: 0 1 auto;/);
 });
 

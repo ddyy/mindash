@@ -254,7 +254,11 @@ main.fit-screen .row { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0,
   }
 /* the card scrolls; its content must not be flex-shrunk to fit - that
    crushes pre boxes and lists into slivers */
-main.fit-screen .col > section.widget.expand { flex: 1 1 0; }
+/* basis AUTO, not 0: the marked card grows into the leftover, but when a
+   column is tighter than its content it shrinks from its own size like
+   its neighbours. With basis 0 it started from nothing and collapsed to
+   a sliver while the unmarked cards kept their full height. */
+main.fit-screen .col > section.widget.expand { flex: 1 1 auto; }
 main.fit-screen .col > section.widget > * { flex-shrink: 0; }
   /* title stays pinned while the card scrolls; negative margins + padding
      extend its background over the card's padding so content slides under
