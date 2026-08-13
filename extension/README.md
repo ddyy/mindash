@@ -5,8 +5,10 @@ your dashboard URL (in `chrome.storage.sync`, so it follows your browser
 profile) - and requests only the `storage` permission. No analytics, no
 network access of its own: the new tab simply navigates to your URL.
 
-The first new tab after installing shows a one-field setup form; change
-the URL later via the extension's Options.
+The first new tab after installing shows a one-field setup form. To
+change the URL later, click the extension's toolbar icon - the same
+settings panel is also at `chrome://extensions` → Details → Extension
+options. **Clear** there unsets the URL, so the next new tab asks again.
 
 ## Load it unpacked (Chrome / Edge / Brave)
 

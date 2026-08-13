@@ -15,18 +15,39 @@ function validUrl(raw) {
 
 const input = document.getElementById("url");
 const msg = document.getElementById("msg");
+
+// Same race as the new tab page had: this script is deferred, so the DOM
+// is ready before it runs, but the storage read is still asynchronous -
+// anything that depends on the stored value has to happen in the callback.
+function say(text, isError) {
+  msg.textContent = text;
+  msg.className = isError ? "err" : "";
+  if (!isError && text) setTimeout(() => { msg.textContent = ""; }, 1800);
+}
+
 chrome.storage.sync.get("url", ({ url }) => {
   if (url) input.value = url;
 });
+
 document.getElementById("f").addEventListener("submit", (e) => {
   e.preventDefault();
   const ok = validUrl(input.value.trim());
   if (!ok) {
-    msg.textContent = "Enter an https:// URL (or http://localhost for dev).";
+    say("Enter an https:// URL (or http://localhost for dev).", true);
     return;
   }
   chrome.storage.sync.set({ url: ok }, () => {
-    msg.textContent = "Saved.";
-    setTimeout(() => { msg.textContent = ""; }, 1500);
+    input.value = ok; // show the normalized form that was actually stored
+    say("Saved.");
+  });
+});
+
+// The way back to a clean slate. Without this the only route was removing
+// and re-adding the extension: the field is `required`, so an empty save
+// is refused rather than treated as "unset".
+document.getElementById("clear").addEventListener("click", () => {
+  chrome.storage.sync.remove("url", () => {
+    input.value = "";
+    say("Cleared - the next new tab will ask for a URL.");
   });
 });
