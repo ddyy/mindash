@@ -68,7 +68,15 @@ export const EDITOR_CSS = /* css */ `
    column keeps its border and background, so the panel still reads as a
    panel, and its toggle stays on it instead of floating on the canvas. */
 .editor-grid.inspector-collapsed { --inspector-w: 2.3rem; }
-.editor-grid.inspector-collapsed #inspector { visibility: hidden; padding: 0; overflow: hidden; }
+/* Hiding the PANEL hid its border with it, so a collapsed rail had no
+   line against the canvas below its header. The contents hide instead;
+   the box - border, background - stays. (Scoped away from mobile, where
+   the panel is a bottom sheet that must show its contents.) */
+.editor-grid.inspector-collapsed #inspector { padding: 0; overflow: hidden; }
+@media (min-width: 901px) {
+  .editor-grid.inspector-collapsed #inspector > * { visibility: hidden; }
+  .editor-grid.outline-collapsed #outline > * { visibility: hidden; }
+}
 /* Sits at the top-right of the panel in BOTH states - the rail is wide
    enough to hold it, so one anchor serves expanded and collapsed alike
    and the control never leaves the panel it belongs to. (The panel's own
@@ -106,7 +114,7 @@ export const EDITOR_CSS = /* css */ `
 /* the sheet header belongs to the mobile bottom sheet alone - on desktop
    the inspector is a column with its own toggle above it */
 .sheet-handle { display: none; }
-.editor-grid.outline-collapsed #outline { visibility: hidden; padding: 0; overflow: hidden; }
+.editor-grid.outline-collapsed #outline { padding: 0; overflow: hidden; }
 .outline-resizer { position: relative; cursor: col-resize; background: transparent; border-right: 1px solid var(--border); }
 .outline-resizer:hover { background: color-mix(in srgb, var(--accent) 25%, transparent); }
 /* the header rule crosses the gutter too: without this it stopped at the
@@ -142,8 +150,10 @@ export const EDITOR_CSS = /* css */ `
    own reset (one id against an id plus a class) and left a band-high gap
    above its sticky header. */
 @media (min-width: 901px) {
-  .editor-grid:not(.outline-collapsed) #outline { padding-top: var(--band-h); }
-  .editor-grid:not(.inspector-collapsed) #inspector { padding-top: var(--band-h); }
+  /* clear the header band, plus a little air - content butted straight
+     against the rule read as if it belonged to the header */
+  .editor-grid:not(.outline-collapsed) #outline,
+  .editor-grid:not(.inspector-collapsed) #inspector { padding-top: calc(var(--band-h) + 0.55rem); }
 }
 /* both bands are exactly --band-h, so their rules and the gutter's meet */
 .outline-toggle, .inspector-toggle { height: var(--band-h); }

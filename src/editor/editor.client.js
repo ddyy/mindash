@@ -3143,6 +3143,18 @@ function initInspectorToggle() {
 }
 initInspectorToggle();
 
+// Selecting something while the inspector is collapsed used to do nothing
+// visible: the panel holds what you just clicked on, so clicking is a
+// request to see it. Hooked on the two surfaces you select FROM rather
+// than on each of the many places that assign `selected` - the intent is
+// the click, and it reads the same whether the click lands on a card, an
+// outline row, or a row/column handle.
+for (const surface of ["preview", "outline"]) {
+  $(surface).addEventListener("click", () => {
+    if (inspectorCollapsed()) setInspectorCollapsed(false);
+  });
+}
+
 function selToken() {
   if (!selected) return "";
   if (selected.kind === "widget") return ";s=w:" + selected.wid;
