@@ -189,6 +189,12 @@ function movePage(from, to) {
   pageIdx = draft.pages.indexOf(viewed);
   if (selected && selected.kind === "page") selected = { kind: "page", pageIdx: draft.pages.indexOf(moved) };
   changed();
+  // Reordering is a REPEATED key press, and the re-render destroys the
+  // tab the key was pressed on - without this, moving a page two places
+  // means re-focusing between every press. Follow the page, not the
+  // position: the tab under the cursor should still be the one moving.
+  const tabs = document.querySelectorAll("#page-tabs button[aria-selected]");
+  tabs[draft.pages.indexOf(moved)]?.focus();
 }
 
 function renderTabs() {
@@ -236,17 +242,33 @@ function renderTabs() {
       draggedPageIdx = null;
       b.classList.remove("dragging");
     });
+    // An insertion CARET, not a highlight: outlining the tab under the
+    // cursor says "here somewhere" and leaves which side to guess. A line
+    // in the gap is the answer to the only question being asked - the
+    // same cue the widget lists use, turned on its side.
     b.addEventListener("dragover", (e) => {
       if (draggedPageIdx === null || draggedPageIdx === i) return;
       e.preventDefault();
-      b.classList.add("drop-hover");
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      const box = b.getBoundingClientRect();
+      const after = e.clientX > box.left + box.width / 2;
+      b.classList.toggle("drop-before", !after);
+      b.classList.toggle("drop-after", after);
     });
-    b.addEventListener("dragleave", () => b.classList.remove("drop-hover"));
+    b.addEventListener("dragleave", () => b.classList.remove("drop-before", "drop-after"));
     b.addEventListener("drop", (e) => {
       e.preventDefault();
-      b.classList.remove("drop-hover");
+      // The cue itself decides, so the drop lands exactly where the line
+      // was drawn rather than recomputing from a coordinate that may have
+      // moved between the last dragover and the drop.
+      const after = b.classList.contains("drop-after");
+      b.classList.remove("drop-before", "drop-after");
       if (draggedPageIdx === null || draggedPageIdx === i) return;
-      movePage(draggedPageIdx, i);
+      // insertAt is an index in the CURRENT array; movePage splices the
+      // page out first, so a destination to the right of the origin has
+      // shifted down by one by the time it is inserted.
+      const insertAt = i + (after ? 1 : 0);
+      movePage(draggedPageIdx, insertAt > draggedPageIdx ? insertAt - 1 : insertAt);
       draggedPageIdx = null;
     });
     b.addEventListener("keydown", (e) => {
@@ -267,6 +289,11 @@ function renderTabs() {
     pageIdx = draft.pages.length - 1;
     selected = { kind: "page", pageIdx };
     changed();
+    // The re-render rebuilds this strip, so the button that was just
+    // clicked no longer exists and focus falls back to the document.
+    // Put it on the tab that was created instead: the arrow-key reorder
+    // and Enter live there, so the keyboard stays where the work is.
+    document.querySelector('#page-tabs [aria-selected="true"]')?.focus();
   });
   tabs.appendChild(add);
 }

@@ -41,6 +41,7 @@ test("the Structure rail is completely absent on mobile", () => {
 });
 
 test("the mobile inspector keeps its handle but hides its scrollbar when minimized", () => {
+  assert.match(mobileQuery, /#inspector, \.editor-grid\.inspector-collapsed #inspector \{[\s\S]*position: fixed; z-index: 40;/, "the sheet paints above sticky preview widget titles");
   assert.match(mobileQuery, /\.sheet-handle \{[^}]*position: sticky[^}]*top: 0/, "the toggle rises as the sheet header");
   assert.match(mobileQuery, /translateY\(calc\(100% - var\(--sheet-peek\)\)\)/, "the closed sheet leaves its handle visible");
   assert.match(mobileQuery, /#inspector\.open[^{]*\{[^}]*translateY\(0\)/, "and slides fully open");
@@ -337,5 +338,22 @@ test("selected Structure widgets restore all four rounded corners", () => {
     EDITOR_CSS.indexOf(".ol-widget.selected { border-radius: 5px; }") >
       EDITOR_CSS.indexOf(".ol-widget + .ol-widget"),
     "the selected radius must follow and override the connected-list corners",
+  );
+});
+
+// Every re-render rebuilds #page-tabs, destroying whatever the keyboard
+// was on. Adding and reordering are the two places that happens while a
+// tab has focus - reordering worst of all, since it is a repeated key
+// press that would otherwise need re-focusing between every press.
+test("the tab strip keeps keyboard focus across its own re-render", () => {
+  assert.match(
+    EDITOR_JS,
+    /draft\.pages\.push\([\s\S]*?changed\(\);[\s\S]*?document\.querySelector\('#page-tabs \[aria-selected="true"\]'\)\?\.focus\(\)/,
+    "a new page leaves focus on the tab it created",
+  );
+  assert.match(
+    EDITOR_JS,
+    /function movePage[\s\S]*?changed\(\);[\s\S]*?tabs\[draft\.pages\.indexOf\(moved\)\]\?\.focus\(\)/,
+    "reordering follows the moving page rather than the position",
   );
 });

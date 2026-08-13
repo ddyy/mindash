@@ -51,7 +51,23 @@ export const EDITOR_CSS = /* css */ `
    rather than a second word in the tab label */
 #page-tabs .tab-public { margin-left: 0.35rem; font-size: 0.75em; vertical-align: 1px; }
 #page-tabs button.dragging { opacity: 0.4; cursor: grabbing; }
-#page-tabs button.drop-hover { outline: 2px dashed var(--accent-fallback); outline-offset: 2px; }
+/* Where the page will LAND, drawn in the gap it will land in. An outline
+   around the hovered tab could only say "next to this one" and left the
+   side to guess. Painted from the base scheme like the rest of the strip,
+   and matching the horizontal rule the widget lists drop against. */
+#page-tabs button[aria-selected] { position: relative; }
+#page-tabs button.drop-before::before,
+#page-tabs button.drop-after::after {
+  content: ""; position: absolute; z-index: 20; top: 1px; bottom: 1px;
+  width: 3px; border-radius: 999px; background: var(--accent-fallback);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-fallback) 20%, transparent);
+}
+#page-tabs button.drop-before::before { left: -0.14rem; }
+#page-tabs button.drop-after::after { right: -0.14rem; }
+/* The strip scrolls, so a line drawn outside the first or last tab is
+   clipped by the scroll container. Those two tuck inside their own edge. */
+#page-tabs button[aria-selected]:first-child.drop-before::before { left: 0; }
+#page-tabs button[aria-selected]:last-of-type.drop-after::after { right: 0; }
 .editor-actions { display: flex; align-items: center; gap: 0.5rem; }
 /* button variants come from the shared system in styles.css */
 /* the width lives on the BODY, not the grid: the top bar is a sibling of
@@ -600,7 +616,7 @@ dialog h2 { margin: 0 0 0.6rem; font-size: 0.95rem; }
      no desktop rail at this width, so the sheet owns the collapsed state. */
   #inspector, .editor-grid.inspector-collapsed #inspector {
     --sheet-peek: calc(44px + env(safe-area-inset-bottom, 0px));
-    position: fixed; left: 0; right: 0; bottom: 0; max-height: 55vh;
+    position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; max-height: 55vh;
     visibility: visible; overflow: hidden; scrollbar-gutter: auto;
     padding: 0 0 env(safe-area-inset-bottom, 0px);
     /* the same surface the inspector is on desktop - the sheet is that
