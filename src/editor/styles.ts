@@ -103,7 +103,12 @@ export const EDITOR_CSS = /* css */ `
     transition: transform 0.2s ease;
   }
   .inspector-content {
-    box-sizing: border-box; width: var(--inspector-expanded-w, 320px);
+    /* The panel's left border and stable scrollbar gutter live inside its
+       grid track. Subtract that measured chrome from the pre-rendered
+       surface so its trailing padding and narrow compound fields remain
+       visible instead of being clipped by overflow-x:hidden. */
+    box-sizing: border-box;
+    width: calc(var(--inspector-expanded-w, 320px) - var(--insp-sb, 1px));
     min-height: 100%; padding: calc(var(--band-h) + 0.55rem) 0.75rem 0.75rem;
     transform: translateX(0);
     transition: transform 0.2s ease;
@@ -441,12 +446,11 @@ export const EDITOR_CSS = /* css */ `
 #inspector .danger-zone { margin-top: 1rem; padding-top: 0.6rem; border-top: 1px solid var(--border); display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .sensitive-badge { font-size: 0.68rem; color: hsl(40 90% 55%); border: 1px solid hsl(40 90% 35%); border-radius: 4px; padding: 0 0.3rem; margin-left: 0.3rem; }
 
-/* quantity + unit on one line: the number stays narrow, the unit takes
-   the rest, so the pair costs the same height as the text input it
-   replaced */
+/* Keep enough room for the native select arrow and the full unit label,
+   even at the Inspector's minimum width. */
 .interval-row { display: flex; gap: 0.3rem; align-items: center; }
-.interval-row .interval-qty { width: 5.5rem; flex: none; }
-.interval-row .interval-unit { flex: 1; min-width: 0; }
+.interval-row .interval-qty { width: 4.5rem; flex: 0 0 4.5rem; }
+.interval-row .interval-unit { flex: 1 1 7rem; min-width: 7rem; }
 .clock-rows { display: grid; gap: 0.3rem; margin-bottom: 0.35rem; }
 .clock-row { display: flex; gap: 0.3rem; align-items: flex-start; }
 .clock-row > input { width: 38%; flex: none; }

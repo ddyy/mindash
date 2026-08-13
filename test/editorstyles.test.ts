@@ -104,7 +104,7 @@ test("desktop side columns animate without forcing motion", () => {
   );
   assert.match(
     EDITOR_CSS,
-    /\.inspector-content \{[\s\S]*width: var\(--inspector-expanded-w, 320px\);[\s\S]*transition: transform 0\.2s ease;/,
+    /\.inspector-content \{[\s\S]*width: calc\(var\(--inspector-expanded-w, 320px\) - var\(--insp-sb, 1px\)\);[\s\S]*transition: transform 0\.2s ease;/,
     "inspector content keeps its expanded layout while sliding",
   );
   assert.match(
@@ -153,6 +153,14 @@ test("open Structure compensates its right padding for the scrollbar gutter", ()
     EDITOR_CSS,
     /\.outline-content \{[\s\S]*padding: calc\(var\(--band-h\) \+ 0\.55rem\) max\(0px, calc\(0\.75rem - var\(--outline-chrome, 1px\)\)\) 0\.75rem 0\.75rem;/,
     "the visible right inset matches the left inset across scrollbar styles",
+  );
+});
+
+test("Inspector preserves its right padding inside the scrollbar gutter", () => {
+  assert.match(
+    EDITOR_CSS,
+    /\.inspector-content \{[\s\S]*width: calc\(var\(--inspector-expanded-w, 320px\) - var\(--insp-sb, 1px\)\);[\s\S]*padding: calc\(var\(--band-h\) \+ 0\.55rem\) 0\.75rem 0\.75rem;/,
+    "the full-size sliding surface fits inside the panel's usable width",
   );
 });
 
@@ -222,8 +230,8 @@ test("the preview stacks by pane width instead of browser width", () => {
 
 test("the interval control is a quantity plus a unit on one row", () => {
   assert.match(EDITOR_CSS, /\.interval-row \{[^}]*display: flex/, "qty and unit share a line");
-  assert.match(EDITOR_CSS, /\.interval-qty \{[^}]*width:/, "the number stays narrow");
-  assert.match(EDITOR_CSS, /\.interval-unit \{[^}]*flex: 1/, "the unit takes the rest");
+  assert.match(EDITOR_CSS, /\.interval-qty \{[^}]*width: 4\.5rem; flex: 0 0 4\.5rem;/, "the number's flex basis overrides the global full-width input rule");
+  assert.match(EDITOR_CSS, /\.interval-unit \{[^}]*flex: 1 1 7rem; min-width: 7rem;/, "the unit label and native arrow remain visible");
 });
 
 // The editor must never commit an interval the server will reject:
