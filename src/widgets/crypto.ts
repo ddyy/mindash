@@ -20,27 +20,43 @@ function pretty(id: string): string {
   return id.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
 
-export async function fetchData(cfg: CryptoWidget): Promise<CryptoData> {
+async function fetchPrices(configs: readonly CryptoWidget[]): Promise<Map<string, CryptoData>> {
+  if (configs.length === 0) return new Map();
+  const currency = configs[0]?.currency;
+  if (!currency || configs.some((cfg) => cfg.currency !== currency)) {
+    throw new Error("crypto batch mixed incompatible currencies");
+  }
+  const coins = [...new Set(configs.flatMap((cfg) => cfg.coins))];
   const url =
-    `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(cfg.coins.join(","))}` +
-    `&vs_currencies=${encodeURIComponent(cfg.currency)}&include_24hr_change=true`;
+    `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(coins.join(","))}` +
+    `&vs_currencies=${encodeURIComponent(currency)}&include_24hr_change=true`;
   const body = (await safeFetchJson(url)) as Record<
     string,
     Record<string, number | undefined> | undefined
   >;
-  return {
-    currency: cfg.currency,
-    rows: cfg.coins.map((id) => {
-      const entry = body[id];
-      const price = entry?.[cfg.currency];
-      const change = entry?.[`${cfg.currency}_24h_change`];
-      return {
-        name: pretty(id),
-        price: typeof price === "number" ? price : null,
-        change: typeof change === "number" ? change : null,
-      };
-    }),
-  };
+  return new Map(configs.map((cfg) => [
+    cfg.id,
+    {
+      currency: cfg.currency,
+      rows: cfg.coins.map((id) => {
+        const entry = body[id];
+        const price = entry?.[cfg.currency];
+        const change = entry?.[`${cfg.currency}_24h_change`];
+        return {
+          name: pretty(id),
+          price: typeof price === "number" ? price : null,
+          change: typeof change === "number" ? change : null,
+        };
+      }),
+    },
+  ]));
+}
+
+export async function fetchData(cfg: CryptoWidget): Promise<CryptoData> {
+  const result = await fetchPrices([cfg]);
+  const data = result.get(cfg.id);
+  if (!data) throw new Error("crypto provider returned no result");
+  return data;
 }
 
 export function formatPrice(v: number, currency: string): string {
@@ -92,6 +108,13 @@ export const def: WidgetDef<CryptoWidget, CryptoData> = {
       typeof w.currency === "string" && w.currency.trim() ? w.currency.trim().toLowerCase() : "usd";
     if (!/^[a-z]{2,6}$/.test(currency)) throw new Error(`${where}: bad currency`);
     return { ...common, refreshSeconds, type: "crypto", coins, currency };
+  },
+  batch: {
+    groupKey: (cfg) => cfg.currency,
+    // Each widget accepts up to 12 coins. Keep a generous ceiling on the
+    // union and URL length even when every widget contains distinct IDs.
+    maxBatchSize: 8,
+    fetch: fetchPrices,
   },
   fetchData,
   render,

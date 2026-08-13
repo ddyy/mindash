@@ -1,4 +1,5 @@
 import m1 from "../migrations/0001_init.sql";
+import m2 from "../migrations/0002_backoff.sql";
 
 // One-click-deploy schema bootstrap: the Deploy to Cloudflare flow
 // provisions an EMPTY D1 database and never runs `wrangler d1 migrations
@@ -10,7 +11,7 @@ import m1 from "../migrations/0001_init.sql";
 // recorded after the migration's tables/indexes/columns are verified to
 // exist - so a partial apply retries on the next request instead of
 // silently leaving a half-migrated schema behind.
-const MIGRATIONS: [string, string][] = [["0001_init.sql", m1]];
+const MIGRATIONS: [string, string][] = [["0001_init.sql", m1], ["0002_backoff.sql", m2]];
 
 function statementsOf(sql: string): string[] {
   const noComments = sql

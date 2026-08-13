@@ -40,6 +40,45 @@ async function logAttempt(
 interface Claim {
   generation: number;
   source_rev: number;
+  // consecutive failures BEFORE this attempt - the exponent for the wait
+  // that follows if this one fails too
+  fail_count: number;
+}
+
+// How long a failing widget waits before the sweep may claim it again.
+//
+// The first failure waits one of the widget's own intervals, and each
+// consecutive one doubles that, up to an hour. Doubling from the interval
+// rather than from a fixed floor keeps a fast card responsive (a 2-minute
+// widget retries in 2 minutes) while a slow one does not get retried
+// faster than it would ever have refreshed anyway.
+//
+// The floor matters as much as the cap: a widget with no interval of its
+// own would otherwise compute a zero-length wait and go straight back to
+// retrying on every sweep, which is the behaviour this exists to stop.
+export const BACKOFF_CAP_MS = 3_600_000;
+const BACKOFF_FLOOR_MS = 60_000;
+
+export function backoffDelayMs(refreshSeconds: number, failCount: number): number {
+  const base = Math.max(refreshSeconds * 1000, BACKOFF_FLOOR_MS);
+  // 2^30 ms is already far past the cap; clamping the exponent keeps the
+  // shift away from the range where doubling loses precision.
+  const doublings = Math.min(Math.max(failCount, 0), 30);
+  return Math.min(base * 2 ** doublings, BACKOFF_CAP_MS);
+}
+
+interface ClaimedRefresh {
+  widget: PullWidgetConfig;
+  trigger: Trigger;
+  owner: string;
+  startedAt: number;
+  claim: Claim;
+}
+
+interface RefreshJob {
+  widgets: PullWidgetConfig[];
+  trigger: Trigger;
+  batch: boolean;
 }
 
 export async function sweep(env: Env): Promise<void> {
@@ -84,15 +123,17 @@ export async function sweep(env: Env): Promise<void> {
       .catch(() => undefined);
   }
 
-  const queue = [...pullWidgets];
+  // Plan compatible groups first; each worker claims its group immediately
+  // before fetching so queued work cannot age through the lease window.
+  const queue = batchJobs(pullWidgets, "cron");
   const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
     for (;;) {
-      const w = queue.shift();
-      if (!w) return;
+      const job = queue.shift();
+      if (!job) return;
       try {
-        await refreshOne(env, w, "cron");
+        await runJob(env, job);
       } catch (e) {
-        console.log(JSON.stringify({ evt: "refresh_error", widget: w.name, error: String(e) }));
+        console.log(JSON.stringify({ evt: "refresh_error", widgets: job.widgets.map((x) => x.name), error: String(e) }));
       }
     }
   });
@@ -101,11 +142,31 @@ export async function sweep(env: Env): Promise<void> {
 
 type RefreshOutcome = "refreshed" | "not_claimed" | "failed";
 
-async function refreshOne(env: Env, w: PullWidgetConfig, trigger: Trigger): Promise<RefreshOutcome> {
-  const now = Date.now();
+export function batchJobs(widgets: PullWidgetConfig[], trigger: Trigger): RefreshJob[] {
+  const jobs: RefreshJob[] = [];
+  const groups = new Map<string, { widgets: PullWidgetConfig[]; max: number }>();
+  for (const widget of widgets) {
+    const mod = getModule(widget.type);
+    if (!mod.batch) {
+      jobs.push({ widgets: [widget], trigger, batch: false });
+      continue;
+    }
+    const key = `${widget.type}\0${mod.batch.groupKey(widget)}`;
+    const group = groups.get(key) ?? { widgets: [], max: Math.max(1, mod.batch.maxBatchSize ?? 25) };
+    group.widgets.push(widget);
+    groups.set(key, group);
+  }
+  for (const group of groups.values()) {
+    for (let i = 0; i < group.widgets.length; i += group.max) {
+      jobs.push({ widgets: group.widgets.slice(i, i + group.max), trigger, batch: true });
+    }
+  }
+  return jobs;
+}
+
+async function claimRefresh(env: Env, w: PullWidgetConfig, trigger: Trigger): Promise<ClaimedRefresh | null> {
+  const startedAt = Date.now();
   const owner = crypto.randomUUID();
-  // Claim: only if due and no live lease. Incrementing generation fences
-  // competing refreshers; capturing source_rev fences config changes.
   const claim = await env.DB
     .prepare(
       `UPDATE refresh_state
@@ -113,62 +174,109 @@ async function refreshOne(env: Env, w: PullWidgetConfig, trigger: Trigger): Prom
        WHERE instance_id = ?3
          AND (lease_owner IS NULL OR lease_expires_at < ?4)
          AND (fetched_at IS NULL OR fetched_at <= ?5)
-       RETURNING generation, source_rev`,
+         AND (next_attempt_at IS NULL OR next_attempt_at <= ?4)
+       RETURNING generation, source_rev, fail_count`,
     )
-    .bind(owner, now + LEASE_MS, w.id, now, now - w.refreshSeconds * 1000)
+    .bind(owner, startedAt + LEASE_MS, w.id, startedAt, startedAt - w.refreshSeconds * 1000)
     .first<Claim>();
-  if (!claim) return "not_claimed"; // not due, or another refresher holds the lease
+  return claim ? { widget: w, trigger, owner, startedAt, claim } : null;
+}
 
-  const mod = getModule(w.type);
-  let data: unknown;
-  try {
-    data = await mod.fetchData(w, env);
-  } catch (e) {
-    await env.DB
-      .prepare(
-        `UPDATE refresh_state
-           SET lease_owner = NULL, lease_expires_at = NULL, last_error = ?1, updated_at = ?2
-         WHERE instance_id = ?3 AND lease_owner = ?4 AND generation = ?5`,
-      )
-      .bind(String(e), Date.now(), w.id, owner, claim.generation)
-      .run();
-    console.log(JSON.stringify({ evt: "widget_fetch_failed", widget: w.name, error: String(e) }));
-    await logAttempt(env, w.id, now, false, trigger, String(e));
-    return "failed";
-  }
+async function failClaim(env: Env, claimed: ClaimedRefresh, error: unknown): Promise<void> {
+  const message = String(error);
+  const now = Date.now();
+  // fetched_at still points at the last SUCCESS (the card keeps showing
+  // that data), so it cannot also serve as "when may we try again" - that
+  // is what next_attempt_at is for.
+  const delay = backoffDelayMs(claimed.widget.refreshSeconds, claimed.claim.fail_count);
+  await env.DB
+    .prepare(
+      `UPDATE refresh_state
+         SET lease_owner = NULL, lease_expires_at = NULL, last_error = ?1, updated_at = ?2,
+             fail_count = fail_count + 1, next_attempt_at = ?6
+       WHERE instance_id = ?3 AND lease_owner = ?4 AND generation = ?5`,
+    )
+    .bind(message, now, claimed.widget.id, claimed.owner, claimed.claim.generation, now + delay)
+    .run();
+  console.log(JSON.stringify({
+    evt: "widget_fetch_failed",
+    widget: claimed.widget.name,
+    error: message,
+    failures: claimed.claim.fail_count + 1,
+    retry_in_ms: delay,
+  }));
+  await logAttempt(env, claimed.widget.id, claimed.startedAt, false, claimed.trigger, message);
+}
 
-  const payloadStr = JSON.stringify({ fetchedAt: Date.now(), data });
+async function publishClaim(env: Env, claimed: ClaimedRefresh, data: unknown): Promise<RefreshOutcome> {
+  const fetchedAt = Date.now();
+  const payloadStr = JSON.stringify({ fetchedAt, data });
   if (payloadStr.length > 100_000) {
-    await env.DB
-      .prepare(
-        `UPDATE refresh_state
-           SET lease_owner = NULL, lease_expires_at = NULL, last_error = ?1, updated_at = ?2
-         WHERE instance_id = ?3 AND lease_owner = ?4 AND generation = ?5`,
-      )
-      .bind(`payload too large (${payloadStr.length} bytes; cap 100000)`, Date.now(), w.id, owner, claim.generation)
-      .run();
-    await logAttempt(env, w.id, now, false, trigger, `payload too large (${payloadStr.length} bytes; cap 100000)`);
+    await failClaim(env, claimed, `payload too large (${payloadStr.length} bytes; cap 100000)`);
     return "failed";
   }
-
-  // Conditional publish: still our lease, our generation, same source_rev.
-  // Payload rides in the fenced UPDATE itself, so publish is atomic.
   const published = await env.DB
     .prepare(
       `UPDATE refresh_state
          SET payload = ?2, current_key = NULL, prev_key = NULL,
              fetched_at = ?3, updated_at = ?3,
-             lease_owner = NULL, lease_expires_at = NULL, last_error = NULL
+             lease_owner = NULL, lease_expires_at = NULL, last_error = NULL,
+             fail_count = 0, next_attempt_at = NULL
        WHERE instance_id = ?4 AND lease_owner = ?5
          AND generation = ?1 AND source_rev = ?6`,
     )
-    .bind(claim.generation, payloadStr, Date.now(), w.id, owner, claim.source_rev)
+    .bind(claimed.claim.generation, payloadStr, fetchedAt, claimed.widget.id, claimed.owner, claimed.claim.source_rev)
     .run();
   if (!published.meta.changed_db) {
-    console.log(JSON.stringify({ evt: "publish_superseded", widget: w.name, generation: claim.generation }));
+    console.log(JSON.stringify({ evt: "publish_superseded", widget: claimed.widget.name, generation: claimed.claim.generation }));
   }
-  await logAttempt(env, w.id, now, true, trigger, published.meta.changed_db ? undefined : "fetched, but publish was superseded by a config change");
+  await logAttempt(env, claimed.widget.id, claimed.startedAt, true, claimed.trigger, published.meta.changed_db ? undefined : "fetched, but publish was superseded by a config change");
   return "refreshed";
+}
+
+async function runJob(env: Env, job: RefreshJob): Promise<RefreshOutcome[]> {
+  const claims: ClaimedRefresh[] = [];
+  for (const widget of job.widgets) {
+    const claim = await claimRefresh(env, widget, job.trigger);
+    if (claim) claims.push(claim);
+  }
+  const first = claims[0];
+  if (!first) return [];
+  const mod = getModule(first.widget.type);
+  if (job.batch && mod.batch) {
+    let results: Map<string, unknown>;
+    try {
+      results = await mod.batch.fetch(claims.map((x) => x.widget), env);
+    } catch (e) {
+      await Promise.all(claims.map((claimed) => failClaim(env, claimed, e)));
+      return claims.map(() => "failed" as const);
+    }
+    // A mapping or publication problem belongs to that widget alone. One
+    // bad result must not turn already-valid siblings into batch failures.
+    return Promise.all(claims.map(async (claimed) => {
+      if (!results.has(claimed.widget.id)) {
+        await failClaim(env, claimed, "batch provider returned no result for widget");
+        return "failed" as const;
+      }
+      try {
+        return await publishClaim(env, claimed, results.get(claimed.widget.id));
+      } catch (e) {
+        await failClaim(env, claimed, e);
+        return "failed" as const;
+      }
+    }));
+  }
+  try {
+    return [await publishClaim(env, first, await mod.fetchData(first.widget, env))];
+  } catch (e) {
+    await failClaim(env, first, e);
+    return ["failed"];
+  }
+}
+
+async function refreshOne(env: Env, w: PullWidgetConfig, trigger: Trigger): Promise<RefreshOutcome> {
+  const outcomes = await runJob(env, { widgets: [w], trigger, batch: getModule(w.type).batch !== undefined });
+  return outcomes[0] ?? "not_claimed";
 }
 
 // "Refresh now": make the widget immediately due, then run the ordinary
@@ -184,7 +292,15 @@ export async function forceRefresh(env: Env, instanceId: string): Promise<{ ok: 
     .prepare("INSERT INTO refresh_state (instance_id) VALUES (?1) ON CONFLICT(instance_id) DO NOTHING")
     .bind(w.id)
     .run();
-  await env.DB.prepare("UPDATE refresh_state SET fetched_at = NULL WHERE instance_id = ?1").bind(w.id).run();
+  // Forcing clears the backoff as well as the due-time: asking for a
+  // refresh IS the decision to try again now, and a widget waiting out an
+  // hour-long backoff is exactly the one someone reaches for the button on.
+  // The failure run is left intact, so if this attempt fails too the next
+  // automatic wait continues from where it was rather than restarting.
+  await env.DB
+    .prepare("UPDATE refresh_state SET fetched_at = NULL, next_attempt_at = NULL WHERE instance_id = ?1")
+    .bind(w.id)
+    .run();
   const outcome = await refreshOne(env, w, "manual");
   if (outcome === "refreshed") return { ok: true };
   if (outcome === "not_claimed") return { ok: false, error: "another refresh holds the lease - try again shortly" };

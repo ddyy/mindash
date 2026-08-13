@@ -196,6 +196,16 @@ export interface WidgetDef<C extends WidgetCommon = any, D = unknown> {
   // title already resolved.
   parse(raw: RawWidget, where: string, common: WidgetCommonInit, h: ParseHelpers): C;
   fetchData?(cfg: C, env: Env): Promise<D>; // present ⇒ pull widget
+  // Optional provider-aware batching. The refresh scheduler owns claims,
+  // fencing, publication, and per-widget logging; the widget owns only
+  // which configs are compatible and how one upstream response is split.
+  // Missing map entries fail only that widget. A thrown error fails the
+  // current batch, without disturbing other groups or last-good payloads.
+  batch?: {
+    groupKey(cfg: C): string;
+    maxBatchSize?: number;
+    fetch(configs: readonly C[], env: Env): Promise<Map<string, D>>;
+  };
   render?(data: D, cfg: C): SafeHtml; // pull widgets
   renderStatic?(cfg: C): SafeHtml; // static widgets: card BODY only (shell built centrally)
   css?: string; // imported from the sibling .css file

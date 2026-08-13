@@ -48,6 +48,11 @@ export const WIDGETS: Record<string, WidgetDef> = {
 
 export interface WidgetModule {
   fetchData(cfg: PullWidgetConfig, env: Env): Promise<unknown>;
+  batch?: {
+    groupKey(cfg: PullWidgetConfig): string;
+    maxBatchSize?: number;
+    fetch(configs: readonly PullWidgetConfig[], env: Env): Promise<Map<string, unknown>>;
+  };
   render(data: unknown, cfg: PullWidgetConfig): SafeHtml;
 }
 
