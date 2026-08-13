@@ -306,7 +306,7 @@ const appHandler = {
       }
       if (url.pathname.startsWith("/asset/")) {
         const key = url.pathname.slice(7);
-        if (!/^[A-Za-z0-9_-]+\.(png|jpe?g|webp)$/.test(key)) return new Response("not found", { status: 404 });
+        if (!/^[A-Za-z0-9_-]+\.(png|jpe?g|webp|svg)$/.test(key)) return new Response("not found", { status: 404 });
         const obj = await env.ASSETS.get(key);
         if (!obj) return new Response("not found", { status: 404 });
         return new Response(obj.body, {
@@ -315,6 +315,18 @@ const appHandler = {
             // content-hashed keys never change meaning
             "cache-control": "public, max-age=31536000, immutable",
             "x-content-type-options": "nosniff",
+            // An SVG opened DIRECTLY is a document, not a picture - and a
+            // same-origin one, so script inside it would run with the
+            // dashboard's cookies. `sandbox` drops it into an opaque
+            // origin with no script, which costs nothing when the file is
+            // used the normal way (as <img>/<link rel=icon>, where a
+            // subresource fetch creates no document at all).
+            //
+            // This is the boundary the upload validator is BACKED BY,
+            // rather than the other way round: sanitizers get bypassed,
+            // headers do not. It hardens the raster formats too, where a
+            // polyglot could otherwise be coaxed into being a document.
+            "content-security-policy": "default-src 'none'; frame-ancestors 'none'; sandbox",
           },
         });
       }

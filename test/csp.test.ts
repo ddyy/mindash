@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { scriptConnectFor } from "../src/render";
 
 // frame-ancestors is the one CSP directive that does NOT fall back to
 // default-src, so `default-src 'none'` reads as airtight while leaving
@@ -35,5 +36,30 @@ test("every content-security-policy served with HTML sets frame-ancestors", () =
   // guards the guard: if the policies move or are refactored into a
   // builder, this count changes and the test demands a fresh look
   // instead of silently passing over zero policies.
-  assert.equal(found, 6, "expected 6 CSP policies; update this test if pages were added or unified");
+  assert.equal(found, 7, "expected 7 CSP policies; update this test if pages were added or unified");
+});
+
+// The analytics opt-in is the ONLY thing that may widen script-src, and
+// it must widen exactly two directives on exactly one surface. The risk
+// it guards is silent scope creep: a future edit that applies the same
+// relaxation to settings/editor/login would put a third-party script on
+// an auth page, which is where it does the most damage.
+test("cloudflare analytics opt-in widens script-src and connect-src together", () => {
+  const off = scriptConnectFor({ cloudflareAnalytics: false } as never);
+  assert.equal(off, "; script-src 'self'; connect-src 'self'");
+
+  const on = scriptConnectFor({ cloudflareAnalytics: true } as never);
+  // both hosts, or the script loads and its report is blocked instead
+  assert.match(on, /script-src 'self' https:\/\/static\.cloudflareinsights\.com/);
+  assert.match(on, /connect-src 'self' https:\/\/cloudflareinsights\.com/);
+});
+
+test("only the dashboard CSP can be widened by the analytics setting", () => {
+  const offenders: string[] = [];
+  for (const file of sourceFiles("src")) {
+    if (file.endsWith("render.ts")) continue; // the one surface allowed to opt in
+    const src = readFileSync(file, "utf8");
+    if (src.includes("cloudflareinsights.com")) offenders.push(file);
+  }
+  assert.equal(offenders.join("\n"), "", "analytics hosts leaked into a non-dashboard CSP");
 });
