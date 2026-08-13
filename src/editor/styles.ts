@@ -211,6 +211,15 @@ export const EDITOR_CSS = /* css */ `
 #preview section.widget .qd {
   position: absolute; top: 0.35rem; right: 0.45rem; opacity: 0;
   pointer-events: auto; padding: 0 0.35rem; font-size: 0.72rem; line-height: 1.5;
+  /* It floats ON the card, so it has to read as a separate thing from any
+     card underneath it. Inheriting the button base gave it the card's own
+     background and a hairline border - on the default theme that is white
+     on white, and the control looked like part of the card. Editor chrome
+     paints from the BASE scheme (as the page tabs do), and the shadow does
+     the separating whatever the theme puts behind it. */
+  background: var(--card-scheme); color: var(--muted-scheme);
+  border: 1px solid var(--muted-scheme);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
 }
 /* The button floats over the card, so nothing in normal flow knows it is
    there: a title long enough to reach the right edge ran straight under
