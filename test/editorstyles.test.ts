@@ -177,3 +177,23 @@ test("typing in inspector fields activates Save before blur", () => {
     "Save commits the visible field value before computing its diff",
   );
 });
+
+test("structure stays uncluttered and widget moves remain hierarchical", () => {
+  assert.doesNotMatch(EDITOR_JS, /const canMove = \{ up:/, "widgets do not repeat four arrow buttons");
+  assert.doesNotMatch(EDITOR_JS, /lbl\] of \[\["↑", -1, "Move row up"/, "rows do not repeat movement arrows");
+  assert.match(EDITOR_JS, /const pageSel = el\("select"\)/, "cross-page moves choose their page once");
+  assert.match(EDITOR_JS, /const group = el\("optgroup"\)[\s\S]*group\.label = rowLabelOf/, "rows group destination columns");
+  assert.match(
+    EDITOR_JS,
+    /"Column " \+ \(ci \+ 1\) \+ " · " \+ c\.width/,
+    "column options use compact labels instead of repeated full paths",
+  );
+});
+
+test("selecting a Structure column highlights its preview column", () => {
+  assert.match(
+    EDITOR_JS,
+    /selected = \{ kind: "column", pageIdx, rowIdx: ri, colIdx: ci \};[\s\S]*renderAll\(\);[\s\S]*highlightPreview\(\);/,
+    "Structure column selection updates both inspector and preview selection",
+  );
+});

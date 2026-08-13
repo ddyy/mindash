@@ -400,6 +400,14 @@ export const EDITOR_CSS = /* css */ `
 #f-description, textarea.desc-input { font-family: inherit; font-size: 0.85rem; resize: vertical; }
 #inspector details { margin-top: 0.7rem; }
 #inspector details summary { color: var(--muted); font-size: 0.78rem; cursor: pointer; }
+.move-widget {
+  margin: 1rem 0 0; padding: 0.65rem;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  display: grid; gap: 0.55rem;
+}
+.move-widget legend { padding: 0 0.25rem; color: var(--muted); font-size: 0.75rem; }
+.move-widget label { margin: 0; }
+.move-widget button { justify-self: end; }
 .theme-actions { margin: 0.9rem 0 0.35rem; display: flex; gap: 0.4rem; flex-wrap: wrap; }
 #inspector .danger-zone { margin-top: 1rem; padding-top: 0.6rem; border-top: 1px solid var(--border); display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .sensitive-badge { font-size: 0.68rem; color: hsl(40 90% 55%); border: 1px solid hsl(40 90% 35%); border-radius: 4px; padding: 0 0.3rem; margin-left: 0.3rem; }

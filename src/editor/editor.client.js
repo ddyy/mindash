@@ -272,24 +272,6 @@ function renderTabs() {
 }
 
 // ---------- outline ----------
-function moveWidget(id, dir) {
-  const loc = findWidget(id);
-  if (!loc) return;
-  const row = draft.pages[loc.pageIdx].rows[loc.rowIdx];
-  const col = row.columns[loc.colIdx];
-  if (dir === "up" || dir === "down") {
-    const j = dir === "up" ? loc.idx - 1 : loc.idx + 1;
-    if (j < 0 || j >= col.widgets.length) return;
-    [col.widgets[loc.idx], col.widgets[j]] = [col.widgets[j], col.widgets[loc.idx]];
-  } else {
-    const cj = dir === "left" ? loc.colIdx - 1 : loc.colIdx + 1;
-    if (cj < 0 || cj >= row.columns.length) return;
-    col.widgets.splice(loc.idx, 1);
-    row.columns[cj].widgets.push(loc.widget);
-  }
-  changed();
-}
-
 function renderOutline() {
   const panel = $("outline");
   panel.textContent = "";
@@ -324,14 +306,6 @@ function renderOutline() {
       changed(true);
     });
     rowHead.appendChild(addColBtn);
-    for (const [sym, delta, lbl] of [["↑", -1, "Move row up"], ["↓", 1, "Move row down"]]) {
-      const mv = el("button", "ol-mini", sym);
-      mv.title = lbl;
-      mv.setAttribute("aria-label", lbl + ": row " + (ri + 1));
-      mv.disabled = ri + delta < 0 || ri + delta >= page.rows.length;
-      mv.addEventListener("click", (e) => { e.stopPropagation(); moveRowStep(ri, delta); });
-      rowHead.appendChild(mv);
-    }
     if (page.rows.length > 1) {
       const delRow = el("button", "ol-mini ol-del", "✕");
       delRow.title = "Delete row " + (ri + 1);
@@ -348,6 +322,7 @@ function renderOutline() {
     title.addEventListener("click", () => {
       selected = { kind: "column", pageIdx, rowIdx: ri, colIdx: ci };
       renderAll();
+      highlightPreview();
     });
     head.appendChild(title);
     if (row.columns.length > 1) {
@@ -367,16 +342,6 @@ function renderOutline() {
       text.appendChild(el("span", "t", (tIcon ? tIcon + " " : "") + widgetTitle(w)));
       text.appendChild(el("span", "ty", w.type));
       row.appendChild(text);
-      const wIdx = col.widgets.indexOf(w);
-      const canMove = { up: wIdx > 0, down: wIdx < col.widgets.length - 1, left: ci > 0, right: ci < page.rows[ri].columns.length - 1 };
-      for (const [sym, dir, label] of [["\u2191", "up", "Move up"], ["\u2193", "down", "Move down"], ["\u2190", "left", "Move to previous column"], ["\u2192", "right", "Move to next column"]]) {
-        const b = el("button", "ol-mini", sym);
-        b.title = label;
-        b.disabled = !canMove[dir];
-        b.setAttribute("aria-label", label + ": " + widgetTitle(w));
-        b.addEventListener("click", (e) => { e.stopPropagation(); moveWidget(w.id, dir); });
-        row.appendChild(b);
-      }
       const qd = el("button", "ol-mini ol-del", "✕");
       qd.title = "Delete widget";
       qd.setAttribute("aria-label", "Delete " + widgetTitle(w));
@@ -2625,30 +2590,57 @@ function renderInspector() {
     root.appendChild(det);
   }
 
-  // move-to picker (accessible alternative to any dragging)
-  const mv = el("div");
-  mv.appendChild(el("label", null, "Move to"));
-  const sel = el("select");
-  sel.appendChild(el("option", null, "(choose destination)")).value = "";
-  draft.pages.forEach((p, pi) =>
-    p.rows.forEach((r, ri) =>
+  // Hierarchical non-dragging move UI: page is chosen once, then rows
+  // group their columns. This keeps the common same-page move compact and
+  // still exposes every cross-page destination without repeating full
+  // “page / row / column” paths in every option.
+  const mv = el("fieldset", "move-widget");
+  mv.appendChild(el("legend", null, "Move widget"));
+  const pageLabel = el("label", null, "Page");
+  const pageSel = el("select");
+  draft.pages.forEach((p, pi) => {
+    const opt = el("option", null, p.name);
+    opt.value = String(pi);
+    pageSel.appendChild(opt);
+  });
+  pageSel.value = String(loc.pageIdx);
+  pageLabel.appendChild(pageSel);
+  mv.appendChild(pageLabel);
+  const destLabel = el("label", null, "Row and column");
+  const destSel = el("select");
+  const fillDestinations = () => {
+    destSel.textContent = "";
+    const pi = Number(pageSel.value);
+    const page = draft.pages[pi];
+    page.rows.forEach((r, ri) => {
+      const group = el("optgroup");
+      group.label = rowLabelOf(r, ri) + (r.title ? " · " + r.title : "");
       r.columns.forEach((c, ci) => {
-        const opt = el("option", null, p.name + " / row " + (ri + 1) + " / col " + (ci + 1) + " (" + c.width + ")");
-        opt.value = pi + ":" + ri + ":" + ci;
-        sel.appendChild(opt);
-      }),
-    ),
-  );
-  sel.addEventListener("change", () => {
-    if (!sel.value) return;
-    const [pi, ri, ci] = sel.value.split(":").map(Number);
+        const opt = el("option", null, "Column " + (ci + 1) + " · " + c.width + (c.title ? " · " + c.title : ""));
+        opt.value = ri + ":" + ci;
+        group.appendChild(opt);
+      });
+      destSel.appendChild(group);
+    });
+    destSel.value = pi === loc.pageIdx ? loc.rowIdx + ":" + loc.colIdx : "0:0";
+  };
+  fillDestinations();
+  pageSel.addEventListener("change", fillDestinations);
+  destLabel.appendChild(destSel);
+  mv.appendChild(destLabel);
+  const moveBtn = el("button", "btn-accent", "Move");
+  moveBtn.type = "button";
+  moveBtn.addEventListener("click", () => {
+    const pi = Number(pageSel.value);
+    const [ri, ci] = destSel.value.split(":").map(Number);
+    if (pi === loc.pageIdx && ri === loc.rowIdx && ci === loc.colIdx) return;
     const from = draft.pages[loc.pageIdx].rows[loc.rowIdx].columns[loc.colIdx].widgets;
     from.splice(from.indexOf(w), 1);
     draft.pages[pi].rows[ri].columns[ci].widgets.push(w);
     pageIdx = pi;
     changed();
   });
-  mv.appendChild(sel);
+  mv.appendChild(moveBtn);
   root.appendChild(mv);
 
   const dz = el("div", "danger-zone");
