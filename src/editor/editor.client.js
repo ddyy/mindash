@@ -1617,6 +1617,68 @@ function control(desc, w) {
     if (desc.help) wrap.appendChild(el("p", "field-help", desc.help));
     return wrap;
   }
+  // Refresh cadence: a quantity plus a unit, so the vocabulary is visible
+  // and an invalid value is unreachable. Stored unchanged as "<n><unit>"
+  // (the YAML view and MCP writes keep using the same string). Seconds
+  // are deliberately absent: the sweep cron runs every two minutes, so a
+  // sub-minute promise would be one the scheduler cannot keep - a config
+  // that already says "30s" still parses and is shown as 30 seconds.
+  if (desc.kind === "interval") {
+    wrap.appendChild(label);
+    const UNITS = [["m", "minutes"], ["h", "hours"], ["d", "days"]];
+    const parse = (v) => {
+      const m = /^([0-9]+)([smhd])$/.exec(String(v ?? "").trim());
+      return m ? { qty: m[1], unit: m[2] } : { qty: "", unit: "" };
+    };
+    const initial = parse(w[desc.key] ?? desc.prefill ?? desc.placeholder);
+    const row = el("div", "interval-row");
+    const qty = el("input");
+    qty.type = "number";
+    qty.min = "1";
+    qty.step = "1";
+    qty.className = "interval-qty";
+    qty.value = initial.qty;
+    const unit = el("select");
+    unit.className = "interval-unit";
+    const opts = initial.unit === "s" ? [["s", "seconds"], ...UNITS] : UNITS;
+    for (const [value, text] of opts) {
+      const o = el("option", null, text);
+      o.value = value;
+      unit.appendChild(o);
+    }
+    unit.value = initial.unit || "m";
+    const commit = () => {
+      const raw = String(qty.value).trim();
+      const n = parseInt(raw, 10);
+      // An invalid quantity must NOT re-render: changed() rebuilds the
+      // inspector, which would discard both the flag and what the user
+      // typed. Flag it in place and wait for a usable value instead.
+      if (raw !== "" && (!Number.isFinite(n) || n < 1)) {
+        qty.classList.add("invalid");
+        return;
+      }
+      qty.classList.remove("invalid");
+      if (raw === "") {
+        if (desc.required) {
+          qty.classList.add("invalid");
+          return;
+        }
+        delete w[desc.key];
+      } else {
+        w[desc.key] = String(n) + unit.value;
+      }
+      probedBodies.delete(w.id);
+      changed();
+      if (String(w.id).startsWith("tmp_")) scheduleProbe(w.id);
+    };
+    qty.addEventListener("change", commit);
+    unit.addEventListener("change", commit);
+    row.appendChild(qty);
+    row.appendChild(unit);
+    wrap.appendChild(row);
+    if (desc.help) wrap.appendChild(el("p", "field-help", desc.help));
+    return wrap;
+  }
   let input;
   if (desc.kind === "textarea") {
     input = el("textarea");

@@ -58,3 +58,9 @@ test("inspector fields contrast with the inspector surface", () => {
     "editor fields use the card surface while the inspector uses the page background",
   );
 });
+
+test("the interval control is a quantity plus a unit on one row", () => {
+  assert.match(EDITOR_CSS, /\.interval-row \{[^}]*display: flex/, "qty and unit share a line");
+  assert.match(EDITOR_CSS, /\.interval-qty \{[^}]*width:/, "the number stays narrow");
+  assert.match(EDITOR_CSS, /\.interval-unit \{[^}]*flex: 1/, "the unit takes the rest");
+});

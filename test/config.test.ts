@@ -186,3 +186,16 @@ test("fill-only edits are reported, not 'No changes'", () => {
   const { summary } = summarize(doc(true), doc(false));
   assert.ok(summary.length > 0, "fill toggle must produce a summary entry");
 });
+
+test("refresh intervals accept days and reject sub-minute or bad units", () => {
+  const w = (iv: string) =>
+    parseProbeWidget({ type: "hackernews", refresh_interval: iv }) as { refreshSeconds: number };
+  assert.equal(w("15m").refreshSeconds, 900);
+  assert.equal(w("2h").refreshSeconds, 7200);
+  assert.equal(w("1d").refreshSeconds, 86_400);   // days: new unit
+  assert.equal(w("7d").refreshSeconds, 604_800);  // a weekly feed needs no 168h
+  assert.equal(w("60s").refreshSeconds, 60);      // still accepted from YAML/MCP
+  assert.throws(() => w("30s"), /below 60s/);
+  assert.throws(() => w("15 min"), /bad interval/);
+  assert.throws(() => w("1w"), /bad interval/);
+});

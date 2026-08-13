@@ -301,6 +301,12 @@ export const EDITOR_CSS = /* css */ `
 #inspector .danger-zone { margin-top: 1rem; padding-top: 0.6rem; border-top: 1px solid var(--border); display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .sensitive-badge { font-size: 0.68rem; color: hsl(40 90% 55%); border: 1px solid hsl(40 90% 35%); border-radius: 4px; padding: 0 0.3rem; margin-left: 0.3rem; }
 
+/* quantity + unit on one line: the number stays narrow, the unit takes
+   the rest, so the pair costs the same height as the text input it
+   replaced */
+.interval-row { display: flex; gap: 0.3rem; align-items: center; }
+.interval-row .interval-qty { width: 5.5rem; flex: none; }
+.interval-row .interval-unit { flex: 1; min-width: 0; }
 .clock-rows { display: grid; gap: 0.3rem; margin-bottom: 0.35rem; }
 .clock-row { display: flex; gap: 0.3rem; align-items: flex-start; }
 .clock-row > input { width: 38%; flex: none; }

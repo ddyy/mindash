@@ -83,11 +83,11 @@ export const COMMON_FIELDS: FieldDesc[] = [
 
 // ---------- parse helpers ----------
 
-const INTERVAL_RE = /^(\d+)([smh])$/;
-const INTERVAL_UNIT: Record<string, number> = { s: 1, m: 60, h: 3600 };
+const INTERVAL_RE = /^(\d+)([smhd])$/;
+const INTERVAL_UNIT: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
 
 export function parseInterval(raw: unknown, where: string): number {
-  if (typeof raw !== "string") throw new Error(`${where}: expected an interval string like "15m"`);
+  if (typeof raw !== "string") throw new Error(`${where}: expected an interval string like "15m" (s, m, h, or d)`);
   const m = INTERVAL_RE.exec(raw);
   const unit = m ? INTERVAL_UNIT[m[2] ?? ""] : undefined;
   if (!m || unit === undefined) throw new Error(`${where}: bad interval "${raw}"`);
