@@ -80,7 +80,6 @@ export const COMMON_FIELDS: FieldDesc[] = [
     key: "expand",
     label: "Expand to fill the column",
     kind: "checkbox",
-    advanced: true,
     help: "Takes the leftover height in this column. Leave it off and the card keeps its natural size.",
   },
   {

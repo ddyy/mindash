@@ -54,9 +54,10 @@ test("expand: only the marked card takes leftover height, in both layouts", () =
   assert.match(CSS, /main\.fit-screen \.col > section\.widget \{\s*flex: 0 1 auto;/);
 });
 
-test("expand: offered on every widget type, as an advanced checkbox", () => {
+test("expand: offered on every widget type, in the main form", () => {
   const field = COMMON_FIELDS.find((f) => f.key === "expand");
   assert.ok(field, "expand is a shared field, not a per-type one");
   assert.equal(field!.kind, "checkbox");
-  assert.equal(field!.advanced, true);
+  // layout is a normal thing to reach for - not buried under Advanced
+  assert.notEqual(field!.advanced, true);
 });

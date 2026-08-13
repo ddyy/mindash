@@ -211,11 +211,8 @@ function widgetSection(
   } else {
     body = html`<p class="pending">refresh pending…</p>`;
   }
-  // same per-type section class as staticSection: widget CSS scoped to
-  // ".<type>" (monitor) must match pull cards too
-  const extra = WIDGETS[w.type]?.sectionClass ?? w.type;
   const mark = payload ? stamp(w, payload.fetchedAt, error !== null, Date.now()) : null;
-  return html`<section class="${extra ? `widget ${extra}` : "widget"}" data-widget="${w.name}" data-wid="${w.id}" style="${accentStyle(w)}">
+  return html`<section class="${cardClass(w)}" data-widget="${w.name}" data-wid="${w.id}" style="${accentStyle(w)}">
     <h2>${w.title}</h2>
     ${w.description ? html`<p class="widget-desc">${w.description}</p>` : null}
     ${body}

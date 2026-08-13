@@ -82,12 +82,16 @@ export const EDITOR_CSS = /* css */ `
    sits under the scrollbar. */
 .inspector-toggle {
   position: absolute; z-index: 3; top: 0; right: 0;
-  width: var(--inspector-w); text-align: right;
+  width: var(--inspector-w); text-align: left;
   font-size: 0.72rem; line-height: 1;
   padding: 0.7rem calc(0.75rem + var(--insp-sb, 0px)) 0.5rem 0.75rem;
   letter-spacing: 0.04em; text-transform: uppercase;
   background: var(--bg); color: var(--muted);
-  border: 0; border-bottom: 1px solid var(--border); border-radius: 0;
+  /* The band is opaque and spans the panel's full width, so it painted
+     over the panel's own left border for its height - the border looked
+     like it started below the header. It carries that border itself. */
+  border: 0; border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border); border-radius: 0;
 }
 .inspector-toggle:hover { color: var(--accent); border-color: var(--border); }
 /* Collapsed, the rail is NARROWER than this button's own padding (0.75rem
@@ -127,7 +131,10 @@ export const EDITOR_CSS = /* css */ `
   font-size: 0.72rem; line-height: 1; padding: 0.7rem 0.75rem 0.5rem;
   letter-spacing: 0.04em; text-transform: uppercase;
   background: var(--bg); color: var(--muted);
-  border: 0; border-bottom: 1px solid var(--border); border-radius: 0;
+  /* mirror of the inspector's: carries the panel's right border, which
+     it would otherwise paint over */
+  border: 0; border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border); border-radius: 0;
 }
 /* content starts below each panel's header band rather than under it */
 /* Desktop only: these clear the panels' header bands, which exist only
