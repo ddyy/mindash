@@ -2836,9 +2836,15 @@ async function openHistory() {
   $("history-dialog").showModal();
 }
 $("history-btn").addEventListener("click", () => openHistory().catch((e) => alert(String(e))));
+// Theme lives in the empty-selection inspector, so the button has to open
+// the panel it renders into - otherwise a collapsed inspector (or, on
+// mobile, a lowered sheet) swallows the click entirely. Uncollapsing AFTER
+// renderAll is deliberate: renderInspector re-derives .open from the
+// selection, and there is no selection here.
 $("theme-btn").addEventListener("click", () => {
   selected = null;
   renderAll();
+  setInspectorCollapsed(false);
   highlightPreview();
 });
 document.addEventListener("keydown", (e) => {
