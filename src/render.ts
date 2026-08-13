@@ -63,9 +63,10 @@ export function themeBodyCss(t: ThemeConfig): string {
 // Cloudflare Web Analytics rides on TWO hosts: the beacon script comes
 // from static.cloudflareinsights.com and reports to cloudflareinsights.com,
 // so naming only the first trades a script-src violation for a connect-src
-// one. Opt-in via config; the default is the strict 'self'-only policy.
-export function scriptConnectFor(cfg: DashConfig): string {
-  return cfg.cloudflareAnalytics
+// one. Opt-in from Settings (app_settings, not the config document); the
+// default is the strict 'self'-only policy.
+export function scriptConnectFor(analytics: boolean): string {
+  return analytics
     ? "; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com"
     : "; script-src 'self'; connect-src 'self'";
 }
@@ -120,6 +121,7 @@ import { relativeTime } from "./widgets/shared";
 import { renderHeartbeat, type RunRow } from "./push/heartbeat";
 import { renderLog, type MessageRow } from "./push/log";
 import { globalHeader } from "./header";
+import { cloudflareAnalytics } from "./appsettings";
 
 interface StateRow {
   instance_id: string;
@@ -508,7 +510,9 @@ export function pageSlugs(cfg: DashConfig): string[] {
 }
 
 export async function renderPage(env: Env, url: URL, slug?: string, authed = true): Promise<Response> {
-  const cfg = await getConfig(env);
+  // Issued together: the settings row is an independent lookup, so making
+  // it serial would add a whole round trip to every page load.
+  const [cfg, analytics] = await Promise.all([getConfig(env), cloudflareAnalytics(env)]);
   const slugs = pageSlugs(cfg);
   let pageIndex = 0;
   if (slug !== undefined) {
@@ -599,7 +603,7 @@ ${authed ? null : html`<footer class="site-footer"><a href="https://github.com/d
       "content-type": "text/html; charset=utf-8",
       "content-security-policy":
         `default-src 'none'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'${formActionFor(cfg)}${
-          scriptConnectFor(cfg)
+          scriptConnectFor(analytics)
         }${imgSrcFor(cfg, pageTheme, page.favicon)}${frameSrcFor(cfg)}`,
       "referrer-policy": "no-referrer",
       ...(page.publicView && page.indexable ? {} : { "x-robots-tag": "noindex, nofollow" }),

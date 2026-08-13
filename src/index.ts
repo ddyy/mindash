@@ -183,6 +183,10 @@ const appHandler = {
             const { removeCredentialAction } = await import("./settings");
             return await removeCredentialAction(req, env, session);
           }
+          case "/settings/analytics": {
+            const { setAnalyticsAction } = await import("./settings");
+            return await setAnalyticsAction(req, env, session, url);
+          }
           case "/settings/log/retention": {
             const { setRetentionAction } = await import("./settings");
             return await setRetentionAction(req, env, session, url);

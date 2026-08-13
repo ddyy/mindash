@@ -15,6 +15,8 @@ import {
   logMaxPerWidget,
   setLogMaxPerWidget,
   LOG_CAP_CHOICES,
+  cloudflareAnalytics,
+  setCloudflareAnalytics,
 } from "./appsettings";
 
 // /settings: the raw-document editor (plan: "the config document IS the
@@ -95,6 +97,7 @@ export async function settingsPage(
     connections,
     retention,
     logCap,
+    analytics,
   ] = await Promise.all([
     csrfToken(session),
     env.DB
@@ -123,6 +126,7 @@ export async function settingsPage(
     listConnections(env),
     logRetentionDays(env),
     logMaxPerWidget(env),
+    cloudflareAnalytics(env),
   ]);
   const passkeySection = html`<section class="widget access" id="passkeys">
     <h2>Passkeys</h2>
@@ -347,6 +351,7 @@ export async function settingsPage(
       <a href="#push-tokens">Push tokens</a>
       <a href="#mcp-access">MCP access</a>
       <a href="#diagnostics">Diagnostics</a>
+      <a href="#analytics">Analytics</a>
       <a href="#browser-home">Browser home</a>
     </nav>
     ${passkeySection}
@@ -384,6 +389,27 @@ export async function settingsPage(
       mean more rows: a busy dashboard writes thousands a day. The per-widget
       cap bounds that without starving a rarely-refreshed widget - it keeps
       each widget's newest entries inside the window.</p>
+    </section>
+    <section class="widget access" id="analytics">
+      <h2>Analytics</h2>
+      <p class="meta">Cloudflare Web Analytics is turned on for your zone in the Cloudflare
+      dashboard, not here. When it is on, Cloudflare injects its beacon into this page
+      after the Worker has already returned - so this dashboard's strict script policy
+      blocks it, the browser logs a console error, and the analytics record nothing.</p>
+      <form method="post" action="/settings/analytics" class="form-grid">
+        <input type="hidden" name="csrf" value="${csrf}">
+        <div class="checks">
+          <label><input type="checkbox" name="cloudflare" value="1"${
+            analytics ? new SafeHtml(" checked") : null
+          }> Let the Cloudflare Web Analytics beacon run</label>
+        </div>
+        <div class="form-actions"><button type="submit" class="btn-accent">Save</button></div>
+      </form>
+      <p class="meta">Turning this on permits two Cloudflare hosts to load and report from
+      your dashboard pages. Settings, the editor, and the sign-in pages keep the strict
+      policy either way - an outside script has no business on a page that handles
+      credentials. Leave it off if you are not using Web Analytics: the beacon stays
+      blocked, which is the console error, but nothing is collected regardless.</p>
     </section>
     ${browserSection}`,
     200,
@@ -817,6 +843,20 @@ export async function revokeTokenAction(req: Request, env: Env, session: Session
     .bind(Date.now(), String(form.get("token_hash") ?? ""))
     .run();
   return settingsPage(env, session, { ok: "token revoked" });
+}
+
+// Same instance-preference rule as retention below: owner-only, never
+// exported, never writable over MCP. Deliberately NOT in the config
+// document - a config-scoped MCP token must not be able to widen the
+// dashboard's script policy.
+export async function setAnalyticsAction(req: Request, env: Env, session: SessionInfo, url: URL): Promise<Response> {
+  const form = await req.formData();
+  if (String(form.get("csrf") ?? "") !== (await csrfToken(session))) {
+    return new Response("stale form (CSRF token mismatch)", { status: 403 });
+  }
+  // An unchecked box submits nothing, which is how it turns OFF.
+  await setCloudflareAnalytics(env, form.get("cloudflare") !== null);
+  return Response.redirect(`${url.origin}/settings#analytics`, 303);
 }
 
 // Retention is an instance preference, not part of the dashboard

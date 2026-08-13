@@ -45,10 +45,10 @@ test("every content-security-policy served with HTML sets frame-ancestors", () =
 // relaxation to settings/editor/login would put a third-party script on
 // an auth page, which is where it does the most damage.
 test("cloudflare analytics opt-in widens script-src and connect-src together", () => {
-  const off = scriptConnectFor({ cloudflareAnalytics: false } as never);
+  const off = scriptConnectFor(false);
   assert.equal(off, "; script-src 'self'; connect-src 'self'");
 
-  const on = scriptConnectFor({ cloudflareAnalytics: true } as never);
+  const on = scriptConnectFor(true);
   // both hosts, or the script loads and its report is blocked instead
   assert.match(on, /script-src 'self' https:\/\/static\.cloudflareinsights\.com/);
   assert.match(on, /connect-src 'self' https:\/\/cloudflareinsights\.com/);

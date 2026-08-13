@@ -138,7 +138,6 @@ export interface DashConfig {
   theme: ThemeConfig;
   themes: Record<string, Partial<ThemeConfig>>;
   timezone?: string; // IANA zone inherited by time-bearing widgets
-  cloudflareAnalytics?: boolean; // let the zone-injected Web Analytics beacon run
   pages: PageConfig[];
   widgets: WidgetConfig[];
 }
@@ -149,7 +148,6 @@ export interface RawDoc {
   theme: ThemeConfig;
   themes?: Record<string, Partial<ThemeConfig>>;
   timezone?: string;
-  cloudflare_analytics?: boolean;
   pages: { name: string; fit_screen?: boolean; public?: boolean; indexable?: boolean; description?: string; hidden?: boolean; collapse_navigation?: boolean; favicon?: string; theme?: string; rows: { name?: string; title?: string; height?: string; fill?: boolean; columns: { width: string; title?: string; widgets: RawWidget[] }[] }[] }[];
 }
 
@@ -379,17 +377,6 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
     }
     timezone = tz;
   }
-  // Cloudflare Web Analytics: the zone injects its beacon into the HTML
-  // AFTER this Worker returns, so the strict script-src blocks it and the
-  // browser logs a CSP violation while the analytics collect nothing.
-  // Opting in widens script-src/connect-src for those two hosts on the
-  // DASHBOARD only - settings, editor, login and setup keep the strict
-  // policy, because an auth surface is the last place to run a third-
-  // party script. Off (absent) leaves every CSP exactly as before.
-  if (r.cloudflare_analytics !== undefined && typeof r.cloudflare_analytics !== "boolean") {
-    throw new Error("config.cloudflare_analytics: expected true or false");
-  }
-  const cloudflareAnalytics = r.cloudflare_analytics === true;
   const themePartial = parsePartialTheme(r.theme, "theme");
   // Named presets: pages overlay one on the global theme.
   const themes: Record<string, Partial<ThemeConfig>> = {};
@@ -526,10 +513,9 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
       theme,
       ...(Object.keys(themes).length ? { themes } : {}),
       ...(timezone ? { timezone } : {}),
-      ...(cloudflareAnalytics ? { cloudflare_analytics: true } : {}),
       pages: docPages,
     },
-    runtime: { theme, themes, timezone, cloudflareAnalytics, pages, widgets },
+    runtime: { theme, themes, timezone, pages, widgets },
   };
 }
 
@@ -703,14 +689,6 @@ export function classifyDiff(base: RawDoc, next: RawDoc): ConfigDiff {
     if (origin && pg.favicon !== basePageIcon.get(pg.name)) {
       diff.needsSources.push(`load favicon for page "${pg.name}" from ${origin}`);
     }
-  }
-  // Letting the analytics beacon run widens script-src to a third-party
-  // host for every viewer, which is a security decision rather than a
-  // layout one - so a layout-scoped token cannot make it. Turning it back
-  // OFF only restores the stricter policy, so it stays unrestricted, the
-  // same asymmetry public/indexable use below.
-  if (next.cloudflare_analytics === true && base.cloudflare_analytics !== true) {
-    diff.needsSources.push("allow the Cloudflare Web Analytics beacon to run (widens script-src)");
   }
   // Exposure is a sources-scope decision: turning a page public lets
   // anyone read what its widgets display. Making it private again is not.

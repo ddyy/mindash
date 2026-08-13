@@ -129,28 +129,6 @@ test("classifyDiff: making a page public needs sources; private does not", () =>
   assert.equal(classifyDiff(pub, priv).needsSources.length, 0);
 });
 
-test("cloudflare_analytics: round-trips, rejects non-booleans, defaults off", () => {
-  const off = validateDoc(doc());
-  assert.equal(off.runtime.cloudflareAnalytics, false);
-  assert.equal("cloudflare_analytics" in off.doc, false, "off must not be persisted");
-
-  const on = validateDoc(doc({ cloudflare_analytics: true }));
-  assert.equal(on.runtime.cloudflareAnalytics, true);
-  assert.equal(on.doc.cloudflare_analytics, true, "must survive the doc round-trip");
-
-  assert.throws(() => validateDoc(doc({ cloudflare_analytics: "yes" })), /true or false/);
-});
-
-// The whole point of keeping this in the config document was that an
-// MCP client could reach it; the scope gate is what makes that safe, so
-// it is the assertion that matters most in this file.
-test("classifyDiff: enabling analytics needs sources; disabling does not", () => {
-  const off = validateDoc(doc()).doc;
-  const on = validateDoc(doc({ cloudflare_analytics: true })).doc;
-  assert.ok(classifyDiff(off, on).needsSources.some((r) => /script-src/.test(r)));
-  assert.equal(classifyDiff(on, off).needsSources.length, 0);
-});
-
 test("enforceIdDiscipline: unknown ids rejected, new widgets get ids", () => {
   const cand = { pages: [{ name: "H", rows: [{ columns: [{ width: "full", widgets: [{ type: "hackernews" }, { id: "w_known" }] }] }] }] };
   const created = enforceIdDiscipline(cand, new Set(["w_known"]));

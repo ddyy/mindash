@@ -71,3 +71,29 @@ export async function setLogMaxPerWidget(env: Env, n: number): Promise<boolean> 
   await setSetting(env, "log_max_per_widget", String(n));
   return true;
 }
+
+// Cloudflare Web Analytics. The zone injects its beacon into the HTML
+// AFTER this Worker returns, so the strict script-src blocks it: the
+// browser logs a CSP violation and the analytics collect nothing. Opting
+// in widens script-src/connect-src on the DASHBOARD only - settings,
+// editor, login and setup keep the strict policy, because an auth surface
+// is the last place to run someone else's script.
+//
+// This is deliberately NOT in the config document: it is a property of
+// this deployment (does your zone inject?), it should not be exported or
+// shared with a dashboard, and keeping it here means no MCP client can
+// widen the CSP through the config API.
+//
+// Fails SOFT like the settings above - an unreadable row must not take
+// the dashboard down, and the safe fallback is the strict policy.
+export async function cloudflareAnalytics(env: Env): Promise<boolean> {
+  try {
+    return (await getSetting(env, "cloudflare_analytics")) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export async function setCloudflareAnalytics(env: Env, on: boolean): Promise<void> {
+  await setSetting(env, "cloudflare_analytics", on ? "1" : "0");
+}
