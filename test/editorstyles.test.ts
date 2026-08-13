@@ -52,6 +52,20 @@ test("the page-tab strip shrinks so editor actions stay reachable", () => {
   assert.match(desktop, /\.editor-actions \{[^}]*flex: none/, "actions never shrink");
 });
 
+test("desktop side columns animate without forcing motion", () => {
+  assert.match(
+    EDITOR_CSS,
+    /\.editor-grid \{ transition: grid-template-columns 0\.2s ease; \}/,
+    "the preview and both side rails resize as one grid animation",
+  );
+  assert.match(EDITOR_CSS, /transition: margin-left 0\.2s ease/, "page tabs follow the structure rail");
+  assert.match(
+    EDITOR_CSS,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.editor-grid, #page-tabs, \.outline-toggle, \.inspector-toggle \{ transition: none; \}/,
+    "reduced-motion users get an immediate state change",
+  );
+});
+
 test("inspector fields contrast with the inspector surface", () => {
   assert.match(
     EDITOR_CSS,

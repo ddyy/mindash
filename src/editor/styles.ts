@@ -13,7 +13,10 @@ export const EDITOR_CSS = /* css */ `
    the :has() rule below (an id plus three classes) - so a collapsed rail
    left the phone's tab strip indented against a full-width canvas. */
 @media (min-width: 901px) {
-  #page-tabs { margin-left: calc(var(--outline-w) + 6px - 1rem); }
+  #page-tabs {
+    margin-left: calc(var(--outline-w) + 6px - 1rem);
+    transition: margin-left 0.2s ease;
+  }
   .editor-top:has(+ .editor-grid.outline-collapsed) #page-tabs { margin-left: calc(2.3rem + 6px - 1rem); }
 }
 .editor-actions { margin-left: auto; flex: none; padding-bottom: 0.5rem; }
@@ -62,7 +65,17 @@ export const EDITOR_CSS = /* css */ `
    resize gutter draws between them, so the three land on one line. It was
    implicit before (each band was content-sized, the panels padded by a
    hand-matched 2.1rem) and they missed each other by ~2px. */
-.editor-grid { --band-h: 2.1rem; position: relative; display: grid; grid-template-columns: var(--outline-w) 6px 1fr var(--inspector-w); flex: 1; min-height: 0; }
+.editor-grid {
+  --band-h: 2.1rem; position: relative; display: grid;
+  grid-template-columns: var(--outline-w) 6px minmax(0, 1fr) var(--inspector-w);
+  flex: 1; min-height: 0;
+}
+@media (min-width: 901px) {
+  /* Collapse the rails and grow the preview as one continuous movement.
+     The variables still hold the resizable widths; animating the resolved
+     grid tracks avoids JS-driven frame updates and preserves drag sizing. */
+  .editor-grid { transition: grid-template-columns 0.2s ease; }
+}
 .editor-grid.outline-collapsed { --outline-w: 2.3rem; }
 /* Collapsed, the inspector becomes a RAIL rather than nothing: the
    column keeps its border and background, so the panel still reads as a
@@ -156,7 +169,10 @@ export const EDITOR_CSS = /* css */ `
   .editor-grid:not(.inspector-collapsed) #inspector { padding-top: calc(var(--band-h) + 0.55rem); }
 }
 /* both bands are exactly --band-h, so their rules and the gutter's meet */
-.outline-toggle, .inspector-toggle { height: var(--band-h); }
+.outline-toggle, .inspector-toggle {
+  height: var(--band-h);
+  transition: width 0.2s ease, color 0.12s ease;
+}
 /* a collapsed rail is not resizable: dragging it used to silently expand
    the panel, so the handle now says so by dropping the resize cursor.
    Double-click still toggles it back open. */
@@ -209,7 +225,12 @@ export const EDITOR_CSS = /* css */ `
 .ol-row { margin-bottom: 0.6rem; border: 1px solid var(--border); border-radius: 8px; padding: 0.35rem 0.4rem; }
 #preview section.widget { cursor: grab; position: relative; }
 #preview section.widget .qd {
-  position: absolute; top: 0.35rem; right: 0.45rem; opacity: 0;
+  /* Cards are position:relative with no z-index, so they all paint in the
+     same layer and the LATER card in the column wins - covering the button
+     of the card above it. A stacking order of its own lifts the button out
+     of that fight; the card keeps z-index auto so it never becomes a
+     stacking context that would trap the button again. */
+  position: absolute; z-index: 4; top: 0.35rem; right: 0.45rem; opacity: 0;
   pointer-events: auto; padding: 0 0.35rem; font-size: 0.72rem; line-height: 1.5;
   /* It floats ON the card, so it has to read as a separate thing from any
      card underneath it. Inheriting the button base gave it the card's own
@@ -511,5 +532,9 @@ dialog h2 { margin: 0 0 0.6rem; font-size: 0.95rem; }
      upward without changing its dimensions or baseline. */
   .sheet-handle[aria-expanded="false"] .sh-chev { transform: rotate(180deg); }
   #preview main { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-grid, #page-tabs, .outline-toggle, .inspector-toggle { transition: none; }
 }
 `;
