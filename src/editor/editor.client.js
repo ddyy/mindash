@@ -4,6 +4,13 @@ const state = JSON.parse(document.getElementById("editor-state").textContent);
 let draft = JSON.parse(JSON.stringify(state.doc));
 let baseVersion = state.version;
 let selected = null; // {kind:"widget"|"column"|"page", pageIdx, colIdx?, wid?}
+// Every edit rebuilds the inspector wholesale (changed() -> renderAll()),
+// so a <details> built fresh each time slams shut the moment you change
+// anything inside it - making the Advanced fields unusable, since each
+// one costs a reopen. Disclosure state lives out here to survive the
+// rebuild, and is deliberately sticky ACROSS widgets: someone working in
+// advanced fields on one card is usually about to do it on the next.
+let advancedOpen = false;
 let pageIdx = (() => {
   const m = /#p=([0-9]+)/.exec(location.hash);
   const i = m ? Number(m[1]) : 0;
@@ -2834,6 +2841,8 @@ function renderInspector() {
   for (const f of basics) root.appendChild(control(f, w));
   if (advanced.length) {
     const det = el("details");
+    det.open = advancedOpen;
+    det.addEventListener("toggle", () => { advancedOpen = det.open; });
     det.appendChild(el("summary", null, "Advanced"));
     for (const f of advanced) det.appendChild(control(f, w));
     root.appendChild(det);
