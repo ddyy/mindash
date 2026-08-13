@@ -480,8 +480,10 @@ section.access[id] { scroll-margin-top: 1rem; }
 /* which page the widget sits on today - the tie-breaker when two cards
    share a title ("Crypto" on Home and on Everything) */
 .log-table .log-page { white-space: nowrap; }
-.log-table .log-page a { color: var(--muted); text-decoration: none; }
-.log-table .log-page a:hover { color: var(--accent); text-decoration: underline; }
+/* No styling of its own: a link in this table looks like every other
+   link in this table. The widget name next to it is untouched too, so
+   the two read as the same kind of thing - which they are, both being
+   filters into this same view. */
 .meta { display: block; color: var(--muted); font-size: 0.78rem; margin-top: 0.1rem; }
 .meta a.quiet { color: var(--muted); text-decoration: none; }
 .meta a.quiet:hover { color: var(--accent); }
