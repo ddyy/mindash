@@ -17,13 +17,23 @@ function validUrl(raw) {
   return null;
 }
 
+// The storage read is an IPC round-trip, so its callback can land either
+// side of DOMContentLoaded. Registering a DOMContentLoaded listener from
+// inside it is a race that loses whenever the read is slower than parsing
+// this (tiny) document - the listener is added after the event, never
+// fires, and the first run shows a BLANK new tab with no way to set a URL.
+function whenReady(fn) {
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn, { once: true });
+  else fn();
+}
+
 chrome.storage.sync.get("url", ({ url }) => {
   const target = url && validUrl(url);
   if (target) {
     location.replace(target);
     return;
   }
-  document.addEventListener("DOMContentLoaded", () => {
+  whenReady(() => {
     const setup = document.getElementById("setup");
     setup.hidden = false;
     document.getElementById("f").addEventListener("submit", (e) => {

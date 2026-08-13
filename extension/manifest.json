@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "mindash new tab",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Opens your self-hosted mindash dashboard in every new tab. No data collected - the only stored value is your dashboard URL.",
   "permissions": ["storage"],
   "chrome_url_overrides": {
