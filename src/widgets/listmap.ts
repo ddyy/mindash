@@ -25,13 +25,17 @@ export function resolvePath(root: unknown, path: string): unknown {
 //   items:      dot-path to the array ("." = the response root)
 //   item_title: path within each item (required)
 //   item_url:   optional path within each item
-//   item_meta:  optional path within each item (muted second line)
+//   item_meta:  optional path(s) within each item (muted second line) -
+//               comma-separated paths join with a separator, so one line
+//               can carry several facts ("project, status" -> "Acme · open").
+//               Paths that resolve to nothing drop out rather than
+//               leaving stray separators.
 
 export interface ListSpec {
   items: string;
   title: string;
   url?: string;
-  meta?: string;
+  meta?: string[];
 }
 
 export interface ListRow {
@@ -55,7 +59,24 @@ export function parseListSpec(w: RawWidget, where: string, h: ParseHelpers): Lis
     return p;
   };
   if (!PATH_RE.test(title)) throw new Error(`${where}.item_title: bad path`);
-  return { items, title, url: rel("item_url"), meta: rel("item_meta") };
+  // item_meta accepts a list: "project, status" puts both on the meta
+  // line. A single path is the same shape it always was.
+  const metaRaw = (w as Record<string, unknown>).item_meta;
+  let meta: string[] | undefined;
+  if (metaRaw !== undefined && metaRaw !== "") {
+    const parts = h
+      .str(metaRaw, `${where}.item_meta`)
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    if (parts.length === 0) throw new Error(`${where}.item_meta: no paths`);
+    if (parts.length > 4) throw new Error(`${where}.item_meta: at most 4 paths`);
+    for (const part of parts) {
+      if (!PATH_RE.test(part)) throw new Error(`${where}.item_meta: bad path "${part.slice(0, 24)}"`);
+    }
+    meta = parts;
+  }
+  return { items, title, url: rel("item_url"), meta };
 }
 
 function display(v: unknown): string | undefined {
@@ -78,7 +99,12 @@ export function extractList(root: unknown, spec: ListSpec, limit = 12): ListRow[
     rows.push({
       title,
       url: typeof urlRaw === "string" ? urlRaw : undefined,
-      meta: spec.meta ? display(resolvePath(item, spec.meta)) : undefined,
+      meta: spec.meta
+        ? spec.meta
+            .map((path) => display(resolvePath(item, path)))
+            .filter((x): x is string => x !== undefined && x !== "")
+            .join(" \u00b7 ") || undefined
+        : undefined,
     });
   }
   return rows;
@@ -108,5 +134,12 @@ export const LIST_FIELDS = [
   },
   { key: "item_title", label: "List: item title path", kind: "text" as const, advanced: true, placeholder: "name" },
   { key: "item_url", label: "List: item link path", kind: "text" as const, advanced: true, placeholder: "url" },
-  { key: "item_meta", label: "List: item meta path", kind: "text" as const, advanced: true, placeholder: "price.amount" },
+  {
+    key: "item_meta",
+    label: "List: item meta path(s)",
+    kind: "text" as const,
+    advanced: true,
+    placeholder: "price.amount",
+    help: 'One path, or several separated by commas ("project, status") to put more than one fact on the meta line.',
+  },
 ];
