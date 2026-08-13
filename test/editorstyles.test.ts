@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EDITOR_CSS } from "../src/editor/styles";
+import { EDITOR_JS } from "../src/editor/client";
 
 // The mobile layout has no inspector toggle, so a collapsed state
 // persisted from desktop (localStorage) must not survive the breakpoint:
@@ -63,4 +64,14 @@ test("the interval control is a quantity plus a unit on one row", () => {
   assert.match(EDITOR_CSS, /\.interval-row \{[^}]*display: flex/, "qty and unit share a line");
   assert.match(EDITOR_CSS, /\.interval-qty \{[^}]*width:/, "the number stays narrow");
   assert.match(EDITOR_CSS, /\.interval-unit \{[^}]*flex: 1/, "the unit takes the rest");
+});
+
+// The editor must never commit an interval the server will reject:
+// parseInterval enforces a 60-second floor on EVERY path (editor, YAML,
+// MCP), so the client applies the same rule before writing the draft.
+test("the interval control enforces the server's 60s floor and whole numbers", () => {
+  assert.match(EDITOR_JS, /UNIT_SECS\[unit\.value\] \|\| 60\) >= 60/, "computed duration must clear 60s");
+  assert.match(EDITOR_JS, /Number\.isInteger\(n\)/, "fractions are rejected, never truncated");
+  assert.match(EDITOR_JS, /qty\.validity\.valid/, "native input validity is respected");
+  assert.match(EDITOR_JS, /qty\.min = unit\.value === "s" \? "60" : "1"/, "the spinner floor tracks the unit");
 });

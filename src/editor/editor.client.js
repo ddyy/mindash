@@ -1620,9 +1620,12 @@ function control(desc, w) {
   // Refresh cadence: a quantity plus a unit, so the vocabulary is visible
   // and an invalid value is unreachable. Stored unchanged as "<n><unit>"
   // (the YAML view and MCP writes keep using the same string). Seconds
-  // are deliberately absent: the sweep cron runs every two minutes, so a
-  // sub-minute promise would be one the scheduler cannot keep - a config
-  // that already says "30s" still parses and is shown as 30 seconds.
+  // are not offered for new values: the sweep cron runs every two
+  // minutes, so a sub-minute promise would be one the scheduler cannot
+  // keep. The unit only appears when an existing config already uses it,
+  // and the 60-SECOND FLOOR IS ENFORCED HERE TOO - parseInterval rejects
+  // anything shorter from every path (editor, YAML, MCP), so the editor
+  // must never commit a value the server will refuse.
   if (desc.kind === "interval") {
     wrap.appendChild(label);
     const UNITS = [["m", "minutes"], ["h", "hours"], ["d", "days"]];
@@ -1630,6 +1633,7 @@ function control(desc, w) {
       const m = /^([0-9]+)([smhd])$/.exec(String(v ?? "").trim());
       return m ? { qty: m[1], unit: m[2] } : { qty: "", unit: "" };
     };
+    const UNIT_SECS = { s: 1, m: 60, h: 3600, d: 86400 };
     const initial = parse(w[desc.key] ?? desc.prefill ?? desc.placeholder);
     const row = el("div", "interval-row");
     const qty = el("input");
@@ -1647,32 +1651,47 @@ function control(desc, w) {
       unit.appendChild(o);
     }
     unit.value = initial.unit || "m";
+    // the browser enforces the floor too, so the spinner and native
+    // validation agree with the server's minimum
+    const syncMin = () => {
+      qty.min = unit.value === "s" ? "60" : "1";
+      qty.title = unit.value === "s" ? "60 seconds or more" : "whole numbers, at least one minute total";
+    };
+    syncMin();
     const commit = () => {
       const raw = String(qty.value).trim();
-      const n = parseInt(raw, 10);
-      // An invalid quantity must NOT re-render: changed() rebuilds the
-      // inspector, which would discard both the flag and what the user
-      // typed. Flag it in place and wait for a usable value instead.
-      if (raw !== "" && (!Number.isFinite(n) || n < 1)) {
+      const n = Number(raw);
+      // Fractions are NOT truncated: a number input accepts "1.5" despite
+      // step=1, and parseInt would have quietly stored 1h. Whole numbers
+      // only, native validity respected, and the computed duration must
+      // clear the same 60s floor parseInterval enforces.
+      const usable =
+        raw !== "" &&
+        qty.validity.valid &&
+        Number.isInteger(n) &&
+        n >= 1 &&
+        n * (UNIT_SECS[unit.value] || 60) >= 60;
+      if (!usable) {
+        // Clearing an optional field is the one benign "empty": anything
+        // else stays on screen flagged, never rewritten to another value.
+        if (raw === "" && !desc.required && qty.validity.valid) {
+          qty.classList.remove("invalid");
+          delete w[desc.key];
+          probedBodies.delete(w.id);
+          changed();
+          return;
+        }
         qty.classList.add("invalid");
         return;
       }
       qty.classList.remove("invalid");
-      if (raw === "") {
-        if (desc.required) {
-          qty.classList.add("invalid");
-          return;
-        }
-        delete w[desc.key];
-      } else {
-        w[desc.key] = String(n) + unit.value;
-      }
+      w[desc.key] = String(n) + unit.value;
       probedBodies.delete(w.id);
       changed();
       if (String(w.id).startsWith("tmp_")) scheduleProbe(w.id);
     };
     qty.addEventListener("change", commit);
-    unit.addEventListener("change", commit);
+    unit.addEventListener("change", () => { syncMin(); commit(); });
     row.appendChild(qty);
     row.appendChild(unit);
     wrap.appendChild(row);
