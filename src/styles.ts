@@ -228,15 +228,19 @@ main {
      scroll internally instead of the page */
   body:has(> main.fit-screen) { height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
   main.fit-screen { flex: 1; min-height: 0; }
-  /* fill rows (default): widgets stretch so all column bottoms in the row
-   align — the updated-ago footnote stays pinned via margin-top:auto. Fit
-   pages have their own flex sizing, so this applies to scrolling pages. */
-main:not(.fit-screen) .row-fill .col > section.widget { flex: 1 1 auto; }
+  /* A column's leftover height goes to the cards marked "expand", and to
+   nothing else. Every card stretching a little was the old behaviour: it
+   inflated three-line clocks to match a feed beside them. Unmarked cards
+   now keep their natural height, and a column with nothing marked simply
+   ends where its content ends. */
+main:not(.fit-screen) .row-fill .col > section.widget.expand { flex: 1 1 auto; }
 main.fit-screen .row { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0, 1fr); grid-auto-rows: minmax(0, 1fr); } /* inline flex-grow carries row height weights */
   main.fit-screen .row:has(> .row-title) { grid-template-rows: auto minmax(0, 1fr); }
   main.fit-screen .col { overflow: hidden; min-height: 0; }
+  /* Fit pages: a card is its own height and scrolls internally if that
+     overflows; the marked one absorbs whatever the viewport leaves. */
   main.fit-screen .col > section.widget {
-    flex: 1 1 0; min-height: 0; overflow-y: auto;
+    flex: 0 1 auto; min-height: 0; overflow-y: auto;
     /* The gutter is RESERVED (no reflow when content grows past the
        card) but not PAINTED: a thumb drawn on every card carved a
        permanent groove down the right edge, most visible on light
@@ -250,6 +254,7 @@ main.fit-screen .row { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0,
   }
 /* the card scrolls; its content must not be flex-shrunk to fit - that
    crushes pre boxes and lists into slivers */
+main.fit-screen .col > section.widget.expand { flex: 1 1 0; }
 main.fit-screen .col > section.widget > * { flex-shrink: 0; }
   /* title stays pinned while the card scrolls; negative margins + padding
      extend its background over the card's padding so content slides under

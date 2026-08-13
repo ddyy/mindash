@@ -524,6 +524,16 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
   // Only widgets that can produce entries - static cards (notes, clocks,
   // bookmarks) never log, so offering them would be a dead choice.
   const loggable = cfg.widgets.filter((w) => isPullWidget(w) || w.type === "heartbeat" || w.type === "log");
+  // Titles repeat across pages ("Uptime" on two of them), so the list
+  // groups by page: that is the thing that tells two of them apart.
+  // Page order, then the order the widgets sit in on the page.
+  const loggableIds = new Set(loggable.map((w) => w.id));
+  const byPage = cfg.pages.map((p) => ({
+    page: p.name,
+    widgets: p.rows
+      .flatMap((r) => r.columns.flatMap((c) => c.widgets))
+      .filter((w) => loggableIds.has(w.id)),
+  })).filter((g) => g.widgets.length > 0);
 
   return page(
     html`<section class="widget access">
@@ -531,8 +541,12 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
       <form method="get" action="/settings/log" class="log-filter">
         <select name="widget" aria-label="Filter by widget">
           <option value="">All widgets</option>
-          ${loggable.map(
-            (w) => html`<option value="${w.id}"${widgetId === w.id ? new SafeHtml(" selected") : null}>${w.title} (${w.type})</option>`,
+          ${byPage.map(
+            (g) => html`<optgroup label="${g.page}">
+            ${g.widgets.map(
+              (w) => html`<option value="${w.id}"${widgetId === w.id ? new SafeHtml(" selected") : null}>${w.title} (${w.type})</option>`,
+            )}
+          </optgroup>`,
           )}
         </select>
         <label class="log-failonly"><input type="checkbox" name="fail" value="1"${

@@ -158,6 +158,13 @@ async function loadWidgetData(env: Env, w: PullWidgetConfig, row: StateRow | und
   return { payload: null, error };
 }
 
+// A card's classes: "widget", its type (so per-widget CSS can scope), and
+// the opt-in expand flag that lets it take a column's leftover height.
+function cardClass(w: { type: string; expand?: boolean }, extra?: string): string {
+  const type = extra ?? WIDGETS[w.type]?.sectionClass ?? w.type;
+  return ["widget", type, w.expand ? "expand" : ""].filter(Boolean).join(" ");
+}
+
 function accentStyle(w: { accent?: string }): string {
   return w.accent ? `--accent:${cssColor(w.accent)}` : "";
 }
@@ -245,8 +252,7 @@ function widgetSection(
 // the type id (iframe opts out via sectionClass: "").
 function staticSection(w: StaticWidgetConfig): SafeHtml {
   const def = WIDGETS[w.type];
-  const extra = def?.sectionClass ?? w.type;
-  return html`<section class="${extra ? `widget ${extra}` : "widget"}" data-widget="${w.name}" data-wid="${w.id}" style="${accentStyle(w)}">
+  return html`<section class="${cardClass(w, def?.sectionClass)}" data-widget="${w.name}" data-wid="${w.id}" style="${accentStyle(w)}">
     <h2>${w.title}</h2>
     ${w.description ? html`<p class="widget-desc">${w.description}</p>` : null}
     ${def?.renderStatic?.(w) ?? null}
@@ -317,7 +323,7 @@ export async function renderMain(env: Env, cfg: DashConfig, pageIndex: number, r
         const lastMsg = results[0]?.created_at ?? 0;
         sections.set(
           w.id,
-          html`<section class="widget log" data-widget="${w.name}" data-wid="${w.id}" style="${accentStyle(w)}">
+          html`<section class="${cardClass(w, "log")}" data-widget="${w.name}" data-wid="${w.id}" style="${accentStyle(w)}">
           <h2>${w.title}</h2>
     ${w.description ? html`<p class="widget-desc">${w.description}</p> ` : null}
           ${renderLog(w, results)}
@@ -372,7 +378,7 @@ export async function renderMain(env: Env, cfg: DashConfig, pageIndex: number, r
       const lastRun = simulated ? 0 : (runRows[0]?.completed_at ?? runRows[0]?.timed_out_at ?? 0);
       sections.set(
         w.id,
-        html`<section class="widget" data-widget="${w.name}" data-wid="${w.id}" style="${accentStyle(w)}">
+        html`<section class="${cardClass(w, "")}" data-widget="${w.name}" data-wid="${w.id}" style="${accentStyle(w)}">
           <h2>${w.title}</h2>
     ${w.description ? html`<p class="widget-desc">${w.description}</p>` : null}
           ${renderHeartbeat(w, runRows, now)}

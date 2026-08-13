@@ -19,6 +19,10 @@ export interface WidgetCommon {
   description?: string; // muted line under the card title
   refreshSeconds: number;
   accent?: string; // hex or HSL triplet; per-card accent override
+  // Takes the leftover vertical space in its column. Opt-in: without
+  // it a card is its natural height, so one marked card absorbs the
+  // slack instead of every card stretching a little.
+  expand?: boolean;
   // The document's timezone, carried to every widget so time-bearing ones
   // (clock, countdown, calendar) inherit it instead of each defaulting to
   // UTC. A widget's own zone field still wins.
@@ -47,7 +51,7 @@ export interface WidgetCommonInit {
 export interface FieldDesc {
   key: string;
   label: string;
-  kind: "text" | "number" | "url" | "interval" | "anchor" | "select" | "secret" | "connection" | "fieldmap" | "geosearch" | "timezone" | "clocklist" | "json" | "linklist" | "textarea" | "strlist" | "upload" | "color";
+  kind: "text" | "number" | "url" | "interval" | "anchor" | "select" | "secret" | "connection" | "fieldmap" | "geosearch" | "timezone" | "clocklist" | "json" | "linklist" | "textarea" | "strlist" | "upload" | "color" | "checkbox";
   required?: boolean;
   placeholder?: string;
   options?: string[];
@@ -72,6 +76,13 @@ export interface WidgetFormDesc {
 export const COMMON_FIELDS: FieldDesc[] = [
   { key: "title", label: "Title", kind: "text", placeholder: "Card heading (defaults per widget type)" },
   { key: "description", label: "Description", kind: "textarea", rows: 3, placeholder: "Optional line under the title" },
+  {
+    key: "expand",
+    label: "Expand to fill the column",
+    kind: "checkbox",
+    advanced: true,
+    help: "Takes the leftover height in this column. Leave it off and the card keeps its natural size.",
+  },
   {
     key: "accent",
     label: "Accent color",

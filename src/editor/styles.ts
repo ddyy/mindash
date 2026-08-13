@@ -299,6 +299,10 @@ export const EDITOR_CSS = /* css */ `
    --bg, so --bg fields otherwise disappear into the panel. */
 #inspector input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"]),
 #inspector select, #inspector textarea, #inspector .str-chip { background: var(--card); }
+/* checkbox fields: box and label on one line, the label doing the
+   labelling rather than a heading above an orphaned box */
+#inspector .check-line { display: flex; align-items: center; gap: 0.1rem; margin: 0.55rem 0 0; font-size: 0.82rem; color: var(--text); font-weight: normal; }
+#inspector .check-line input { width: auto; margin: 0 0.15rem 0 0; }
 #inspector .field-help { font-size: 0.72rem; color: var(--muted); margin: 0.1rem 0 0; }
 /* description textareas are prose, not code: UI font, vertical resize only */
 #f-description, textarea.desc-input { font-family: inherit; font-size: 0.85rem; resize: vertical; }

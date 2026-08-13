@@ -201,6 +201,10 @@ function parseWidget(w: RawWidget, where: string, timezone?: string): WidgetConf
       : {}),
     ...(accent ? { accent } : {}),
     ...(timezone ? { timezone } : {}),
+    // Layout flag shared by every type: "yes" comes from the editor's
+    // checkbox, true from YAML or MCP. Stored only when set, so an
+    // unmarked card adds nothing to the document.
+    ...(w.expand === true || w.expand === "yes" ? { expand: true } : {}),
   };
   if (w.type === "heartbeat") {
     const tokenSecret =

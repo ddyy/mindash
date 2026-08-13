@@ -1569,6 +1569,26 @@ function control(desc, w) {
     if (desc.help) wrap.appendChild(el("p", "field-help", desc.help));
     return wrap;
   }
+  if (desc.kind === "checkbox") {
+    // The label sits AFTER the box and wraps it, the way the page
+    // inspector's own toggles do - a bare label above a checkbox reads as
+    // a heading for the field rather than as the thing being switched.
+    const line = el("label", "check-line");
+    const box = el("input");
+    box.type = "checkbox";
+    box.id = "f-" + desc.key;
+    box.checked = w[desc.key] === true;
+    box.addEventListener("change", () => {
+      if (box.checked) w[desc.key] = true;
+      else delete w[desc.key];
+      changed();
+    });
+    line.appendChild(box);
+    line.appendChild(document.createTextNode(" " + desc.label));
+    wrap.appendChild(line);
+    if (desc.help) wrap.appendChild(el("p", "field-help", desc.help));
+    return wrap;
+  }
   if (desc.kind === "upload") {
     wrap.appendChild(label);
     const rowEl = el("div", "clock-row");
