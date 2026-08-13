@@ -79,24 +79,51 @@ export async function settingsPage(
   session: SessionInfo,
   notice?: { ok?: string; error?: string },
 ): Promise<Response> {
-  const csrf = await csrfToken(session);
-  const { results: grants } = await env.DB
-    .prepare(
-      `SELECT grant_db_id, client_name, client_id, scopes, created_at FROM oauth_grants
-       WHERE revoked_at IS NULL AND epoch = (SELECT epoch FROM owner_state WHERE id = 1)
-       ORDER BY created_at DESC`,
-    )
-    .all<GrantRow>();
-  const { results: tokens } = await env.DB
-    .prepare(
-      `SELECT token_hash, label, scopes, created_at FROM mcp_tokens
-       WHERE revoked_at IS NULL AND epoch = (SELECT epoch FROM owner_state WHERE id = 1)
-       ORDER BY created_at DESC`,
-    )
-    .all<McpTokenRow>();
-  const { results: creds } = await env.DB
-    .prepare("SELECT credential_id, created_at FROM credentials WHERE revoked_at IS NULL ORDER BY created_at")
-    .all<{ credential_id: string; created_at: number }>();
+  // Everything this page needs, in flight together. These reads are
+  // independent, and D1 lives in one region: awaited one after another
+  // they were ten sequential round trips, which is what put this page at
+  // a 376ms median and a 950ms p95 while burning 7ms of CPU.
+  const [
+    csrf,
+    { results: grants },
+    { results: tokens },
+    { results: creds },
+    { results: pushTokens },
+    cfg,
+    creds2,
+    keyStatus,
+    connections,
+    retention,
+    logCap,
+  ] = await Promise.all([
+    csrfToken(session),
+    env.DB
+      .prepare(
+        `SELECT grant_db_id, client_name, client_id, scopes, created_at FROM oauth_grants
+         WHERE revoked_at IS NULL AND epoch = (SELECT epoch FROM owner_state WHERE id = 1)
+         ORDER BY created_at DESC`,
+      )
+      .all<GrantRow>(),
+    env.DB
+      .prepare(
+        `SELECT token_hash, label, scopes, created_at FROM mcp_tokens
+         WHERE revoked_at IS NULL AND epoch = (SELECT epoch FROM owner_state WHERE id = 1)
+         ORDER BY created_at DESC`,
+      )
+      .all<McpTokenRow>(),
+    env.DB
+      .prepare("SELECT credential_id, created_at FROM credentials WHERE revoked_at IS NULL ORDER BY created_at")
+      .all<{ credential_id: string; created_at: number }>(),
+    env.DB
+      .prepare("SELECT token_hash, widget_name, created_at FROM push_tokens WHERE revoked_at IS NULL ORDER BY created_at DESC")
+      .all<{ token_hash: string; widget_name: string; created_at: number }>(),
+    getConfig(env),
+    listCredentials(env),
+    vaultKeyStatus(env),
+    listConnections(env),
+    logRetentionDays(env),
+    logMaxPerWidget(env),
+  ]);
   const passkeySection = html`<section class="widget access" id="passkeys">
     <h2>Passkeys</h2>
     <ul class="feed">
@@ -154,10 +181,7 @@ export async function settingsPage(
       )}
     </ul>
   </section>`;
-  const { results: pushTokens } = await env.DB
-    .prepare("SELECT token_hash, widget_name, created_at FROM push_tokens WHERE revoked_at IS NULL ORDER BY created_at DESC")
-    .all<{ token_hash: string; widget_name: string; created_at: number }>();
-  const heartbeatNames = (await getConfig(env)).widgets
+  const heartbeatNames = cfg.widgets
     .filter((w) => w.type === "heartbeat" || w.type === "log")
     .map((w) => w.name);
   const pushSection = html`<section class="widget access" id="push-tokens">
@@ -191,10 +215,6 @@ export async function settingsPage(
     </form>`
     }
   </section>`;
-  const creds2 = await listCredentials(env);
-  const keyStatus = await vaultKeyStatus(env);
-  const retention = await logRetentionDays(env);
-  const logCap = await logMaxPerWidget(env);
   const credentialSection = html`<section class="widget access" id="credentials">
     <h2>API credentials</h2>
     <p class="meta">Encrypted in the database; widgets reference them by name. Each credential
@@ -246,7 +266,7 @@ export async function settingsPage(
       <div class="form-actions"><button type="submit" class="btn-accent">Save credential</button></div>
     </form>
   </section>`;
-  const connections = await listConnections(env);
+
   const connectionSection = html`<section class="widget access" id="mcp-connections">
     <h2>MCP connections</h2>
     <p class="meta">OAuth sign-ins to other MCP servers, for MCP widgets that need
@@ -367,7 +387,7 @@ export async function settingsPage(
     </section>
     ${browserSection}`,
     200,
-    await getConfig(env),
+    cfg,
   );
 }
 

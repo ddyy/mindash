@@ -30,6 +30,53 @@ import { UI_JS } from "./uilive";
 import { SETUP_JS, setupPage, setupApply } from "./setup";
 import { ASSET_VERSION } from "./assetversion";
 
+// Routes that serve a constant (or an R2 object) and touch NO database.
+// They are answered BEFORE the schema bootstrap, because ensureSchema
+// costs two D1 round trips on a cold isolate and a low-traffic instance
+// makes most requests cold ones - which is how /robots.txt ended up with
+// a 133ms median for returning a fixed string.
+function staticRoute(req: Request, url: URL): Response | null {
+  if (req.method !== "GET" && req.method !== "HEAD") return null;
+  // Version-matched asset requests cache immutably (pages embed
+  // ?v=<content hash>, so a deploy busts instantly); bare requests
+  // stay no-cache so nothing can pin a stale copy.
+  const assetCache =
+    url.searchParams.get("v") === ASSET_VERSION ? "public, max-age=31536000, immutable" : "no-cache";
+  if (url.pathname === "/robots.txt") {
+    return new Response(
+      `User-agent: *\nDisallow: /settings\nDisallow: /auth\nDisallow: /login\nDisallow: /mcp\nDisallow: /push\nDisallow: /oauth\nSitemap: ${url.origin}/sitemap.xml\n`,
+      { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=86400" } },
+    );
+  }
+  if (url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico") {
+    // the 12-track grid mark, accent on transparent
+    return new Response(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="3" y="3" width="12" height="17" rx="2.5" fill="#3d99f5"/><rect x="17" y="3" width="12" height="8" rx="2.5" fill="#3d99f5" opacity="0.55"/><rect x="17" y="13" width="12" height="7" rx="2.5" fill="#3d99f5" opacity="0.75"/><rect x="3" y="22" width="26" height="7" rx="2.5" fill="#3d99f5" opacity="0.35"/></svg>`,
+      { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=604800" } },
+    );
+  }
+  if (url.pathname === "/styles.css" || url.pathname === "/custom.css") {
+    return new Response(url.pathname === "/styles.css" ? CSS : CUSTOM_CSS, {
+      headers: { "content-type": "text/css; charset=utf-8", "cache-control": assetCache },
+    });
+  }
+  if (url.pathname === "/editor.css") {
+    return new Response(EDITOR_CSS, {
+      headers: { "content-type": "text/css; charset=utf-8", "cache-control": assetCache },
+    });
+  }
+  if (
+    url.pathname === "/auth.js" || url.pathname === "/editor.js" || url.pathname === "/clock.js" ||
+    url.pathname === "/ui.js" || url.pathname === "/setup.js"
+  ) {
+    const scripts = { "/auth.js": AUTH_JS, "/editor.js": EDITOR_JS, "/clock.js": CLOCK_JS, "/ui.js": UI_JS, "/setup.js": SETUP_JS };
+    return new Response(scripts[url.pathname as keyof typeof scripts], {
+      headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": assetCache },
+    });
+  }
+  return null;
+}
+
 // Everything that is not the token-authenticated /mcp API: dashboard,
 // login, settings, push ingest, and the OAuth consent UI. Wrapped by
 // workers-oauth-provider as the defaultHandler.
@@ -196,19 +243,6 @@ const appHandler = {
       if (req.method !== "GET" && req.method !== "HEAD") {
         return new Response("method not allowed", { status: 405 });
       }
-      // Version-matched asset requests cache immutably (pages embed
-      // ?v=<content hash>, so a deploy busts instantly); bare requests
-      // stay no-cache so nothing can pin a stale copy.
-      const assetCache =
-        url.searchParams.get("v") === ASSET_VERSION
-          ? "public, max-age=31536000, immutable"
-          : "no-cache";
-      if (url.pathname === "/robots.txt") {
-        return new Response(
-          `User-agent: *\nDisallow: /settings\nDisallow: /auth\nDisallow: /login\nDisallow: /mcp\nDisallow: /push\nDisallow: /oauth\nSitemap: ${url.origin}/sitemap.xml\n`,
-          { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=86400" } },
-        );
-      }
       if (url.pathname === "/sitemap.xml") {
         // Only pages search engines are ALLOWED to index appear: public AND
         // indexable (everything else already sends noindex). Instances with
@@ -270,30 +304,6 @@ const appHandler = {
           { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=86400" } },
         );
       }
-      if (url.pathname === "/favicon.svg" || url.pathname === "/favicon.ico") {
-        // the 12-track grid mark, accent on transparent
-        return new Response(
-          `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="3" y="3" width="12" height="17" rx="2.5" fill="#3d99f5"/><rect x="17" y="3" width="12" height="8" rx="2.5" fill="#3d99f5" opacity="0.55"/><rect x="17" y="13" width="12" height="7" rx="2.5" fill="#3d99f5" opacity="0.75"/><rect x="3" y="22" width="26" height="7" rx="2.5" fill="#3d99f5" opacity="0.35"/></svg>`,
-          { headers: { "content-type": "image/svg+xml", "cache-control": "public, max-age=604800" } },
-        );
-      }
-      if (url.pathname === "/styles.css" || url.pathname === "/custom.css") {
-        return new Response(url.pathname === "/styles.css" ? CSS : CUSTOM_CSS, {
-          headers: { "content-type": "text/css; charset=utf-8", "cache-control": assetCache },
-        });
-      }
-      if (
-        url.pathname === "/auth.js" || url.pathname === "/editor.js" || url.pathname === "/clock.js" ||
-        url.pathname === "/ui.js" || url.pathname === "/setup.js"
-      ) {
-        const scripts = { "/auth.js": AUTH_JS, "/editor.js": EDITOR_JS, "/clock.js": CLOCK_JS, "/ui.js": UI_JS, "/setup.js": SETUP_JS };
-        return new Response(scripts[url.pathname as keyof typeof scripts], {
-          headers: {
-            "content-type": "text/javascript; charset=utf-8",
-            "cache-control": assetCache,
-          },
-        });
-      }
       if (url.pathname.startsWith("/asset/")) {
         const key = url.pathname.slice(7);
         if (!/^[A-Za-z0-9_-]+\.(png|jpe?g|webp)$/.test(key)) return new Response("not found", { status: 404 });
@@ -306,11 +316,6 @@ const appHandler = {
             "cache-control": "public, max-age=31536000, immutable",
             "x-content-type-options": "nosniff",
           },
-        });
-      }
-      if (url.pathname === "/editor.css") {
-        return new Response(EDITOR_CSS, {
-          headers: { "content-type": "text/css; charset=utf-8", "cache-control": assetCache },
         });
       }
       // OAuth-client callback (upstream MCP connections). Session-gated:
@@ -515,10 +520,14 @@ async function dcrGuard(env: Env): Promise<{ blocked: Response } | { slotId: str
 export default {
   async fetch(req, env, ctx): Promise<Response> {
     const url = new URL(req.url);
-    // Schema bootstrap runs before ANY routing: /register (and other
-    // provider-owned routes) never reach appHandler, so a fresh one-click
-    // deploy whose first stateful request is DCR must not race the
-    // tables into existence. Idempotent and per-isolate cached.
+    // Constants first: no database, so no bootstrap, so no cold-isolate
+    // D1 round trip for a stylesheet.
+    const asset = staticRoute(req, url);
+    if (asset) return asset;
+    // Schema bootstrap runs before ANY remaining routing: /register (and
+    // other provider-owned routes) never reach appHandler, so a fresh
+    // one-click deploy whose first stateful request is DCR must not race
+    // the tables into existence. Idempotent and per-isolate cached.
     await ensureSchema(env);
     if (req.method === "POST" && url.pathname === "/register") {
       const admission = await dcrGuard(env);
