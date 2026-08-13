@@ -61,8 +61,52 @@ test("desktop side columns animate without forcing motion", () => {
   assert.match(EDITOR_CSS, /transition: margin-left 0\.2s ease/, "page tabs follow the structure rail");
   assert.match(
     EDITOR_CSS,
-    /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.editor-grid, #page-tabs, \.outline-toggle, \.inspector-toggle \{ transition: none; \}/,
+    /\.outline-content \{[\s\S]*width: calc\(var\(--outline-expanded-w, 230px\) - var\(--outline-chrome, 1px\)\);[\s\S]*transition: transform 0\.2s ease;/,
+    "structure content keeps its expanded layout while sliding",
+  );
+  assert.match(
+    EDITOR_CSS,
+    /\.inspector-content \{[\s\S]*width: var\(--inspector-expanded-w, 320px\);[\s\S]*transition: transform 0\.2s ease;/,
+    "inspector content keeps its expanded layout while sliding",
+  );
+  assert.match(
+    EDITOR_CSS,
+    /\.editor-grid\.outline-collapsed \.outline-content \{[^}]*translateX\(-100%\)/,
+    "structure slides outward through its clipped panel",
+  );
+  assert.match(
+    EDITOR_CSS,
+    /\.editor-grid\.inspector-collapsed \.inspector-content \{[^}]*translateX\(100%\)/,
+    "inspector slides outward through its clipped panel",
+  );
+  assert.match(
+    EDITOR_CSS,
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.editor-grid, #page-tabs, \.outline-toggle, \.inspector-toggle,[\s\S]*\.outline-content, \.inspector-content \{ transition: none; \}/,
     "reduced-motion users get an immediate state change",
+  );
+});
+
+test("collapsed desktop rails are full-height directional controls", () => {
+  assert.match(
+    EDITOR_CSS,
+    /\.editor-grid\.inspector-collapsed \.inspector-toggle,[\s\S]*\.editor-grid\.outline-collapsed \.outline-toggle \{[\s\S]*bottom: 0; height: auto;/,
+    "the entire rail is clickable",
+  );
+  assert.match(
+    EDITOR_CSS,
+    /\.editor-grid \.rail-icon \{[\s\S]*top: 0;[\s\S]*height: var\(--band-h\);[\s\S]*border-bottom: 1px solid var\(--border\)/,
+    "panel identity stays in a ruled header band at the top",
+  );
+  assert.match(EDITOR_CSS, /\.editor-grid \.rail-arrow \{[\s\S]*top: 50%; left: 50%;[\s\S]*translate\(-50%, -50%\)/, "the arrow alone is centered");
+  assert.match(EDITOR_JS, /el\("span", "rail-arrow", "›"\)/, "structure points into the opening panel");
+  assert.match(EDITOR_JS, /el\("span", "rail-arrow", "‹"\)/, "inspector points into the opening panel");
+});
+
+test("the structure resize gutter disappears with the collapsed panel", () => {
+  assert.match(
+    EDITOR_CSS,
+    /\.editor-grid\.outline-collapsed \.outline-resizer \{ visibility: hidden; cursor: default; \}/,
+    "the minimized structure rail has no draggable gutter",
   );
 });
 
@@ -71,6 +115,27 @@ test("inspector fields contrast with the inspector surface", () => {
     EDITOR_CSS,
     /#inspector select, #inspector textarea, #inspector \.str-chip \{ background: var\(--card\); \}/,
     "editor fields use the card surface while the inspector uses the page background",
+  );
+});
+
+test("preview widget delete controls remain visibly destructive", () => {
+  assert.match(
+    EDITOR_CSS,
+    /#preview section\.widget \.qd \{[\s\S]*background: hsl\(0 70% 52%\); color: #fff;/,
+    "delete buttons are red before hover in every theme",
+  );
+});
+
+test("fit-screen previews show vertically expandable cards", () => {
+  assert.match(
+    EDITOR_CSS,
+    /#preview main\.fit-screen \{[\s\S]*height: clamp\(30rem, calc\(100dvh - 11rem\), 48rem\);[\s\S]*overflow: hidden;/,
+    "the preview provides a bounded height for leftover space",
+  );
+  assert.match(
+    EDITOR_CSS,
+    /#preview main\.fit-screen \.col > section\.widget\.expand \{ flex: 1 1 0; \}/,
+    "marked cards absorb that leftover preview height",
   );
 });
 
@@ -88,4 +153,22 @@ test("the interval control enforces the server's 60s floor and whole numbers", (
   assert.match(EDITOR_JS, /Number\.isInteger\(n\)/, "fractions are rejected, never truncated");
   assert.match(EDITOR_JS, /qty\.validity\.valid/, "native input validity is respected");
   assert.match(EDITOR_JS, /qty\.min = unit\.value === "s" \? "60" : "1"/, "the spinner floor tracks the unit");
+});
+
+test("typing in inspector fields activates Save before blur", () => {
+  assert.match(
+    EDITOR_JS,
+    /function markPendingFieldInput\(\)[\s\S]*\$\("save-btn"\)\.disabled = false;/,
+    "pending text makes Save immediately available",
+  );
+  assert.match(
+    EDITOR_JS,
+    /\$\("inspector"\)\.addEventListener\("input",[\s\S]*markPendingFieldInput\(\)/,
+    "the behavior is delegated across re-rendered inspector fields",
+  );
+  assert.match(
+    EDITOR_JS,
+    /if \(pendingFieldInput && document\.activeElement instanceof HTMLElement\)[\s\S]*document\.activeElement\.blur\(\);[\s\S]*\/settings\/editor\/diff/,
+    "Save commits the visible field value before computing its diff",
+  );
 });

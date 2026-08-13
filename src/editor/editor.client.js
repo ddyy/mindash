@@ -77,9 +77,21 @@ function snapshot() {
   if (undoStack.length > 60) undoStack.shift();
 }
 let draftRev = 0; // bumps on every dirtying edit; guards mid-save edits
+let pendingFieldInput = false;
 function markDirty() {
   dirty = true;
+  pendingFieldInput = false;
   draftRev++;
+  $("dirty").textContent = "unsaved changes";
+  $("save-btn").disabled = false;
+}
+
+// Text controls commit on change so renderAll() cannot replace the focused
+// inspector after every key. Still surface the edit immediately: Save is
+// available while typing, and its handler blurs the field to run the normal
+// commit/validation path before it computes the diff.
+function markPendingFieldInput() {
+  pendingFieldInput = true;
   $("dirty").textContent = "unsaved changes";
   $("save-btn").disabled = false;
 }
@@ -279,8 +291,10 @@ function moveWidget(id, dir) {
 }
 
 function renderOutline() {
-  const root = $("outline");
-  root.textContent = "";
+  const panel = $("outline");
+  panel.textContent = "";
+  const root = el("div", "outline-content");
+  panel.appendChild(root);
   const page = draft.pages[pageIdx];
   if (!page) return;
   const pageHead = el("div", "ol-page");
@@ -2260,12 +2274,14 @@ function sheetHandle(root) {
 }
 
 function renderInspector() {
-  const root = $("inspector");
-  root.textContent = "";
+  const panel = $("inspector");
+  panel.textContent = "";
   // selection raises the mobile sheet, but never overrides a deliberate
   // collapse - that flag is shared with desktop and outranks selection
-  root.classList.toggle("open", selected !== null && !inspectorCollapsed());
-  sheetHandle(root);
+  panel.classList.toggle("open", selected !== null && !inspectorCollapsed());
+  sheetHandle(panel);
+  const root = el("div", "inspector-content");
+  panel.appendChild(root);
   document.dispatchEvent(new CustomEvent("mindash-inspector-toggled"));
   if (!selected) { renderThemePanel(root); return; }
 
@@ -2994,6 +3010,17 @@ async function doSave(base) {
 }
 
 $("save-btn").addEventListener("click", async () => {
+  // A text field may still have focus, so its change handler has not yet
+  // copied the visible value into the draft. Blur first and let that
+  // synchronous handler commit before diffing. Invalid fields remain in
+  // place and the normal server validation explains what must be fixed.
+  if (pendingFieldInput && document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+  if (pendingFieldInput) {
+    alert("Fix the highlighted field before saving.");
+    return;
+  }
   const { data } = await api("/settings/editor/diff", { doc: draft });
   if (data.error) { alert("Draft invalid: " + data.error); return; }
   const list = $("save-summary");
@@ -3030,7 +3057,7 @@ document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "z" && !yamlOpen) { e.preventDefault(); undo(); }
 });
 window.addEventListener("beforeunload", (e) => {
-  if (!dirty && !yamlDirty) return;
+  if (!dirty && !yamlDirty && !pendingFieldInput) return;
   e.preventDefault();
   e.returnValue = ""; // legacy engines require returnValue for the prompt
 });
@@ -3049,6 +3076,7 @@ function initOutlinePanel() {
   else if (saved) {
     const w = Math.min(OUTLINE_MAX, Math.max(OUTLINE_MIN, parseInt(saved) || 230));
     document.body.style.setProperty("--outline-w", w + "px");
+    document.body.style.setProperty("--outline-expanded-w", w + "px");
   }
 
   const bar = el("div", "outline-resizer");
@@ -3068,6 +3096,7 @@ function initOutlinePanel() {
       const w = Math.min(OUTLINE_MAX, Math.max(OUTLINE_MIN, startW + ev.clientX - startX));
       grid.classList.remove("outline-collapsed");
       document.body.style.setProperty("--outline-w", w + "px");
+      document.body.style.setProperty("--outline-expanded-w", w + "px");
     };
     const up = () => {
       document.removeEventListener("mousemove", move);
@@ -3080,13 +3109,32 @@ function initOutlinePanel() {
   });
   $("outline").after(bar);
 
+  // The sliding inner surface is sized to the panel's real content box,
+  // not the outer grid track. This keeps its trailing 0.75rem inset clear
+  // of the border and platform-specific scrollbar gutter.
+  const outline = $("outline");
+  const syncOutlineChrome = () => {
+    document.body.style.setProperty(
+      "--outline-chrome",
+      Math.max(1, outline.offsetWidth - outline.clientWidth) + "px",
+    );
+  };
+  syncOutlineChrome();
+  window.addEventListener("resize", syncOutlineChrome);
+
   const toggle = el("button", "outline-toggle");
   const syncToggle = () => {
     const hidden = grid.classList.contains("outline-collapsed");
     // The icon is the panel's identity and never changes; expanded, the
     // label names the panel ("First" below it is a page name, which never
     // said what this panel IS) and the chevron says which way it goes.
-    toggle.textContent = hidden ? "▤" : "« ▤ Page structure";
+    toggle.replaceChildren();
+    if (hidden) {
+      toggle.appendChild(el("span", "rail-icon", "▤"));
+      toggle.appendChild(el("span", "rail-arrow", "›"));
+    } else {
+      toggle.textContent = "« ▤ Page structure";
+    }
     toggle.title = hidden ? "Show structure panel" : "Hide structure panel";
     toggle.setAttribute("aria-label", hidden ? "Show structure panel" : "Hide structure panel");
     toggle.setAttribute("aria-expanded", String(!hidden));
@@ -3117,7 +3165,13 @@ function initInspectorToggle() {
   const sync = () => {
     const hidden = grid.classList.contains("inspector-collapsed");
     // mirrors the structure header opposite it: icon + name + the way out
-    toggle.textContent = hidden ? "\u{1F50D}" : "\u{1F50D} Inspector »";
+    toggle.replaceChildren();
+    if (hidden) {
+      toggle.appendChild(el("span", "rail-icon", "\u{1F50D}"));
+      toggle.appendChild(el("span", "rail-arrow", "‹"));
+    } else {
+      toggle.textContent = "\u{1F50D} Inspector »";
+    }
     toggle.title = hidden ? "Show inspector panel" : "Hide inspector panel";
     toggle.setAttribute("aria-label", hidden ? "Show inspector panel" : "Hide inspector panel");
     toggle.setAttribute("aria-expanded", String(!hidden));
@@ -3172,3 +3226,14 @@ function renderAll() {
 }
 renderAll();
 refreshPreview();
+
+// Inspector text entries intentionally commit on `change`, but the Save
+// affordance must react on the first keystroke. Search boxes are transient
+// filters/pickers rather than config values and are excluded.
+$("inspector").addEventListener("input", (e) => {
+  const control = e.target;
+  if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement)) return;
+  if (control.type === "search" || control.type === "color" || control.type === "file") return;
+  if (control.closest(".tz-box")) return;
+  markPendingFieldInput();
+});

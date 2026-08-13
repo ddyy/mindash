@@ -87,8 +87,29 @@ export const EDITOR_CSS = /* css */ `
    the panel is a bottom sheet that must show its contents.) */
 .editor-grid.inspector-collapsed #inspector { padding: 0; overflow: hidden; }
 @media (min-width: 901px) {
-  .editor-grid.inspector-collapsed #inspector > * { visibility: hidden; }
-  .editor-grid.outline-collapsed #outline > * { visibility: hidden; }
+  /* Each panel is a clipping viewport around a full-width surface. The
+     surface slides with the animated outer edge instead of reflowing at
+     every intermediate width, so its controls retain their real shape. */
+  .editor-grid #outline, .editor-grid #inspector { overflow-x: hidden; padding: 0; }
+  .outline-content {
+    box-sizing: border-box;
+    width: calc(var(--outline-expanded-w, 230px) - var(--outline-chrome, 1px));
+    min-height: 100%; padding: calc(var(--band-h) + 0.55rem) 0.75rem 0.75rem;
+    transform: translateX(0);
+    transition: transform 0.2s ease;
+  }
+  .inspector-content {
+    box-sizing: border-box; width: var(--inspector-expanded-w, 320px);
+    min-height: 100%; padding: calc(var(--band-h) + 0.55rem) 0.75rem 0.75rem;
+    transform: translateX(0);
+    transition: transform 0.2s ease;
+  }
+  .editor-grid.outline-collapsed .outline-content {
+    transform: translateX(-100%);
+  }
+  .editor-grid.inspector-collapsed .inspector-content {
+    transform: translateX(100%);
+  }
 }
 /* Sits at the top-right of the panel in BOTH states - the rail is wide
    enough to hold it, so one anchor serves expanded and collapsed alike
@@ -122,8 +143,24 @@ export const EDITOR_CSS = /* css */ `
    and the icon centres in the rail. */
 .editor-grid.inspector-collapsed .inspector-toggle,
 .editor-grid.outline-collapsed .outline-toggle {
-  padding-left: 0; padding-right: 0; text-align: center;
+  top: 0; bottom: 0; height: auto;
+  display: block; position: absolute;
+  padding: 0; text-align: center;
+  line-height: 1;
+  border-bottom: 0;
 }
+.editor-grid .rail-icon {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: var(--band-h); display: flex; align-items: center; justify-content: center;
+  font-size: 0.72rem; border-bottom: 1px solid var(--border);
+}
+.editor-grid .rail-arrow {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.35rem;
+}
+.editor-grid.outline-collapsed .outline-toggle { cursor: e-resize; }
+.editor-grid.inspector-collapsed .inspector-toggle { cursor: w-resize; }
 /* the sheet header belongs to the mobile bottom sheet alone - on desktop
    the inspector is a column with its own toggle above it */
 .sheet-handle { display: none; }
@@ -162,37 +199,52 @@ export const EDITOR_CSS = /* css */ `
    where there are side panels. On mobile they out-specified the sheet's
    own reset (one id against an id plus a class) and left a band-high gap
    above its sticky header. */
-@media (min-width: 901px) {
-  /* clear the header band, plus a little air - content butted straight
-     against the rule read as if it belonged to the header */
-  .editor-grid:not(.outline-collapsed) #outline,
-  .editor-grid:not(.inspector-collapsed) #inspector { padding-top: calc(var(--band-h) + 0.55rem); }
-}
 /* both bands are exactly --band-h, so their rules and the gutter's meet */
 .outline-toggle, .inspector-toggle {
   height: var(--band-h);
+  white-space: nowrap; overflow: hidden;
   transition: width 0.2s ease, color 0.12s ease;
 }
 /* a collapsed rail is not resizable: dragging it used to silently expand
    the panel, so the handle now says so by dropping the resize cursor.
    Double-click still toggles it back open. */
-.editor-grid.outline-collapsed .outline-resizer { cursor: default; }
+.editor-grid.outline-collapsed .outline-resizer { visibility: hidden; cursor: default; }
 .outline-toggle:hover { color: var(--accent); border-color: var(--border); }
 #outline, #inspector { overflow-y: auto; padding: 0.75rem; border-right: 1px solid var(--border); }
-/* the gutter is reserved whether or not it is in use, so the inspector's
-   toggle can sit beside a scrollbar whose width never changes */
-#inspector { scrollbar-gutter: stable; }
+/* Reserve the gutter whether or not it is in use. Besides keeping the
+   inspector header stable, this gives the full-width sliding surfaces a
+   fixed content box and preserves their trailing padding. */
+#outline, #inspector { scrollbar-gutter: stable; }
 #inspector { border-right: 0; border-left: 1px solid var(--border); }
 /* even padding all round: the canvas gets the same breathing room above
    it as it has at its sides and foot */
 #center { overflow-y: auto; padding: 0.75rem 1rem; background: var(--bg); }
 #preview main { padding: 0; max-width: none; }
-/* fit-screen is a live-page layout; inside the editor preview all of its
-   rules are neutralized so cards render at natural size */
-#preview main.fit-screen .row { flex: none !important; grid-template-rows: none; grid-auto-rows: auto; }
-#preview main.fit-screen .col { overflow: visible; }
-#preview main.fit-screen .col > section.widget { flex: none; min-height: auto; overflow: visible; }
-#preview main.fit-screen .col > section.widget > h2 { position: static; margin: 0 0 0.6rem; padding: 0; }
+/* Give fit-screen drafts a bounded viewport of their own. This lets cards
+   marked expand visibly absorb leftover height, while the editor's centre
+   pane remains the outer scroller. The decoration handles consume a little
+   room, so this is a faithful layout preview rather than pixel identity. */
+@media (min-width: 901px) {
+  #preview main.fit-screen {
+    height: clamp(30rem, calc(100dvh - 11rem), 48rem);
+    min-height: 30rem; overflow: hidden;
+  }
+  #preview main.fit-screen .row {
+    flex: 1 1 0 !important; min-height: 0;
+    grid-template-rows: minmax(0, 1fr); grid-auto-rows: minmax(0, 1fr);
+  }
+  #preview main.fit-screen .row:has(> .row-title) { grid-template-rows: auto minmax(0, 1fr); }
+  #preview main.fit-screen .col { overflow: hidden; min-height: 0; }
+  #preview main.fit-screen .col > section.widget {
+    flex: 0 1 auto; min-height: 0; overflow-y: auto;
+  }
+  #preview main.fit-screen .col > section.widget.expand { flex: 1 1 0; }
+  /* Sticky live-page headings obscure editor chrome and are unnecessary
+     in the bounded preview; expansion itself remains accurate. */
+  #preview main.fit-screen .col > section.widget > h2 {
+    position: static; margin: 0 0 0.6rem; padding: 0;
+  }
+}
 /* visible containers: the page, its rows, and their columns all read as
    structure in the editor - one nesting level per border weight */
 #preview main.page-frame {
@@ -232,14 +284,10 @@ export const EDITOR_CSS = /* css */ `
      stacking context that would trap the button again. */
   position: absolute; z-index: 4; top: 0.35rem; right: 0.45rem; opacity: 0;
   pointer-events: auto; padding: 0 0.35rem; font-size: 0.72rem; line-height: 1.5;
-  /* It floats ON the card, so it has to read as a separate thing from any
-     card underneath it. Inheriting the button base gave it the card's own
-     background and a hairline border - on the default theme that is white
-     on white, and the control looked like part of the card. Editor chrome
-     paints from the BASE scheme (as the page tabs do), and the shadow does
-     the separating whatever the theme puts behind it. */
-  background: var(--card-scheme); color: var(--muted-scheme);
-  border: 1px solid var(--muted-scheme);
+  /* Destructive preview chrome stays red in every dashboard theme. The
+     shadow and explicit border keep it distinct over light cards. */
+  background: hsl(0 70% 52%); color: #fff;
+  border: 1px solid hsl(0 70% 44%);
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
 }
 /* The button floats over the card, so nothing in normal flow knows it is
@@ -250,7 +298,7 @@ export const EDITOR_CSS = /* css */ `
 #preview section.widget > h2,
 #preview section.widget > .widget-desc { padding-right: 1.7rem; }
 #preview section.widget:hover .qd { opacity: 1; }
-.qd:hover { background: hsl(0 70% 52%); border-color: hsl(0 70% 52%); color: #fff; }
+.qd:hover { background: hsl(0 75% 44%); border-color: hsl(0 75% 38%); color: #fff; }
 .row-handle, .col-handle { position: relative; cursor: grab; }
 .row-handle.dragging, .col-handle.dragging { opacity: 0.4; cursor: grabbing; }
 .h-actions {
@@ -535,6 +583,7 @@ dialog h2 { margin: 0 0 0.6rem; font-size: 0.95rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .editor-grid, #page-tabs, .outline-toggle, .inspector-toggle { transition: none; }
+  .editor-grid, #page-tabs, .outline-toggle, .inspector-toggle,
+  .outline-content, .inspector-content { transition: none; }
 }
 `;
