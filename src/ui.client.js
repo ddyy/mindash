@@ -45,7 +45,59 @@
       })
       .catch(function () { return false; });
   }
-  setInterval(function () { loadInto(location.href); }, 300000);
+  // Auto-refresh, visibility-aware. An unconditional 5-minute interval
+  // kept redrawing hidden tabs - 288 Worker invocations and D1 reads a
+  // day per abandoned tab, for a page nobody is looking at, on an app
+  // whose whole pitch is "leave me open as your new tab page". The
+  // decision itself lives in autorefresh.client.js; this is the wiring.
+  var lastAutoRefreshAttempt = Date.now();
+  var autoRefreshTimer = null;
+  var autoRefreshInFlight = false;
+
+  function clearAutoRefreshTimer() {
+    if (autoRefreshTimer !== null) {
+      clearTimeout(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+  }
+
+  function scheduleAutoRefresh() {
+    var d = decideAutoRefresh({
+      now: Date.now(),
+      lastAttempt: lastAutoRefreshAttempt,
+      hidden: document.hidden === true,
+      inFlight: autoRefreshInFlight,
+    });
+    if (d.action === "none") return;
+    clearAutoRefreshTimer();
+    if (d.action === "cancel") return;
+    if (d.action === "run") {
+      runAutoRefresh();
+      return;
+    }
+    autoRefreshTimer = setTimeout(runAutoRefresh, d.delay);
+  }
+
+  function runAutoRefresh() {
+    autoRefreshTimer = null;
+    if (document.hidden === true || autoRefreshInFlight) {
+      scheduleAutoRefresh();
+      return;
+    }
+    // Stamp the ATTEMPT, before the request rather than after it: a
+    // failing endpoint must not leave every later visibility change
+    // looking overdue and firing another immediate retry.
+    lastAutoRefreshAttempt = Date.now();
+    autoRefreshInFlight = true;
+    // loadInto resolves false rather than rejecting, so this always runs.
+    loadInto(location.href).then(function () {
+      autoRefreshInFlight = false;
+      scheduleAutoRefresh();
+    });
+  }
+
+  document.addEventListener("visibilitychange", scheduleAutoRefresh);
+  scheduleAutoRefresh();
 
   // Per-widget force refresh (owner sessions only - the server renders
   // the ↻ button only when authed). Reuses the editor's refresh endpoint,
