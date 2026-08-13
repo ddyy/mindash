@@ -535,6 +535,7 @@ export async function renderPage(env: Env, url: URL, slug?: string, authed = tru
   });
 
   const kiosk = url.searchParams.get("kiosk") === "1";
+  const collapseNav = page.collapseNav === true;
   const kioskHref = `${slug !== undefined ? `/p/${slug}` : "/"}?kiosk=1`;
   const doc = html`<!doctype html>
 <html lang="en">
@@ -552,11 +553,11 @@ ${pageTheme.favicon ? html`<link rel="icon" href="${pageTheme.favicon}">` : html
 ${hasLiveWidgets(cfg) ? html`<script src="${av("/clock.js")}" defer></script>` : null}
 <script src="${av("/ui.js")}" defer></script>
 </head>
-<body>
+<body${collapseNav && !kiosk ? html` class="nav-collapsed"` : null}>
 ${
     kiosk
       ? null
-      : html`${globalHeader("dashboard", {
+      : html`<div class="dashboard-chrome" id="dashboard-chrome">${globalHeader("dashboard", {
           title: pageTheme.title,
           logo: pageTheme.logo,
           editHref: `/settings/editor#p=${pageIndex}`,
@@ -570,7 +571,7 @@ ${
                   : null
               }</nav>`
             : null
-        }`
+        }${collapseNav ? html`<button class="nav-reveal" type="button" aria-controls="dashboard-chrome" aria-expanded="false" title="Show navigation" aria-label="Show navigation"><span aria-hidden="true"></span></button>` : null}</div>`
   }
 ${main}
 ${authed ? null : html`<footer class="site-footer"><a href="https://github.com/ddyy/mindash" rel="noreferrer">made with mindash</a></footer>`}

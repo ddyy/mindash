@@ -254,6 +254,11 @@ test("typing in inspector fields activates Save before blur", () => {
   );
 });
 
+test("the page Inspector exposes collapsed navigation", () => {
+  assert.match(EDITOR_JS, /collapseNav\.checked = p\.collapse_navigation === true/);
+  assert.match(EDITOR_JS, /document\.createTextNode\(" Collapse navigation"\)/);
+});
+
 test("structure stays uncluttered and widget moves remain hierarchical", () => {
   assert.doesNotMatch(EDITOR_JS, /const canMove = \{ up:/, "widgets do not repeat four arrow buttons");
   assert.doesNotMatch(EDITOR_JS, /lbl\] of \[\["↑", -1, "Move row up"/, "rows do not repeat movement arrows");

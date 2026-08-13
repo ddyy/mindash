@@ -2477,6 +2477,20 @@ function renderInspector() {
     hideWrap.appendChild(document.createTextNode(" Hide from page menu"));
     root.appendChild(hideWrap);
     root.appendChild(el("p", "field-help", "The page stays reachable by its URL; it just isn't listed in the dashboard's tabs."));
+    const navWrap = el("label", null, null);
+    const collapseNav = el("input");
+    collapseNav.type = "checkbox";
+    collapseNav.style.width = "auto";
+    collapseNav.checked = p.collapse_navigation === true;
+    collapseNav.addEventListener("change", () => {
+      if (collapseNav.checked) p.collapse_navigation = true;
+      else delete p.collapse_navigation;
+      changed();
+    });
+    navWrap.appendChild(collapseNav);
+    navWrap.appendChild(document.createTextNode(" Collapse navigation"));
+    root.appendChild(navWrap);
+    root.appendChild(el("p", "field-help", "Starts this dashboard with its header and page toolbar hidden. Reveal them from the top-right corner."));
     const pubWrap = el("label", null, null);
     const pub = el("input");
     pub.type = "checkbox";

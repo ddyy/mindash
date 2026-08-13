@@ -425,6 +425,7 @@ function layoutSignature(doc: DocShape): string {
       pub: p.public ?? null,
       th: p.theme ?? null,
       hid: p.hidden ?? null,
+      cn: p.collapse_navigation ?? null,
       ix: p.indexable ?? null,
       d: p.description ?? null,
       r: ((p.rows ?? []) as Record<string, unknown>[]).map((r) => ({

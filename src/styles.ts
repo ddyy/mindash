@@ -216,7 +216,7 @@ main {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 1rem 1.25rem 2rem;
+  padding: 1rem 1.25rem 1.25rem;
   width: 100%;
 }
 .row { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1rem; }
@@ -541,6 +541,45 @@ ul.kv .v { font-variant-numeric: tabular-nums; }
 .delta.down { color: var(--negative); }
 .mcp-text { margin: 0 0 0.5rem; font-size: 0.85rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 body > main:first-child { padding-top: 1rem; } /* kiosk: no header above */
+/* Per-page new-tab mode: chrome is absent from flow at rest, then opens
+   over the dashboard so revealing it never shifts the widgets. */
+.nav-reveal {
+  position: absolute; z-index: 70; top: 100%; left: 50%;
+  width: 3rem; height: 1.5rem; padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent); border-top: 0;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted); background: var(--bg);
+  opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(-50%);
+}
+.nav-reveal span {
+  width: 0.35rem; height: 0.35rem;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg); transition: transform 0.15s ease;
+}
+.nav-reveal:hover, .nav-reveal:focus-visible {
+  opacity: 1; color: var(--text);
+  background: color-mix(in srgb, var(--bg) 92%, var(--text) 8%);
+  border-color: color-mix(in srgb, var(--border) 65%, transparent); border-top: 0;
+}
+body.nav-collapsed .dashboard-chrome {
+  display: block; position: fixed; z-index: 65; top: 0; left: 0; right: 0;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  border-bottom: 1px solid var(--border); box-shadow: 0 8px 24px rgb(0 0 0 / 0.22);
+  backdrop-filter: blur(12px);
+  transform: translateY(-100%); visibility: hidden; pointer-events: none;
+  transition: transform 0.2s ease, visibility 0s linear 0.2s;
+}
+body.nav-collapsed.nav-open .dashboard-chrome {
+  transform: translateY(0); visibility: visible; pointer-events: auto;
+  transition-delay: 0s;
+}
+body.nav-collapsed.nav-open .nav-reveal { opacity: 1; }
+body.nav-collapsed.nav-open .nav-reveal span { transform: rotate(225deg); }
+body.kiosk .nav-reveal { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  body.nav-collapsed .dashboard-chrome { transition: none; }
+}
 /* JS fullscreen: hide the chrome but keep the page tabs so you can
    switch pages without leaving fullscreen (clicks soft-navigate) */
 body.kiosk header h1, body.kiosk header .updated { display: none; }

@@ -29,6 +29,32 @@
   if (fsQuery.addEventListener) fsQuery.addEventListener("change", syncKiosk);
   syncKiosk();
 
+  // Per-page collapsed navigation: reveal as an overlay so the dashboard
+  // never reflows. The state is intentionally tab-local and resets on a
+  // fresh new tab; Escape and outside clicks close it again.
+  var navReveal = document.querySelector(".nav-reveal");
+  function setNavOpen(open) {
+    if (!navReveal) return;
+    document.body.classList.toggle("nav-open", open);
+    navReveal.setAttribute("aria-expanded", String(open));
+    navReveal.setAttribute("aria-label", open ? "Hide navigation" : "Show navigation");
+    navReveal.setAttribute("title", open ? "Hide navigation" : "Show navigation");
+  }
+  if (navReveal) {
+    navReveal.addEventListener("click", function (e) {
+      e.stopPropagation();
+      setNavOpen(!document.body.classList.contains("nav-open"));
+    });
+    document.addEventListener("click", function (e) {
+      if (!document.body.classList.contains("nav-open")) return;
+      if (e.target && e.target.closest && e.target.closest(".dashboard-chrome")) return;
+      setNavOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") setNavOpen(false);
+    });
+  }
+
   function loadInto(url) {
     return fetch(url, { credentials: "same-origin" })
       .then(function (r) { return r.ok ? r.text() : null; })

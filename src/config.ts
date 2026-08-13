@@ -104,6 +104,7 @@ export interface PageConfig {
   publicView?: boolean; // render without a session (read-only; noindex unless indexable)
   indexable?: boolean; // public pages only: allow search engines
   hidden?: boolean; // omit from the dashboard page menu (still reachable by URL)
+  collapseNav?: boolean; // start dashboard chrome collapsed; reveal as an overlay
   description?: string; // meta description + link-preview text
   theme?: string; // named preset overlaid on the global theme
   rows: RowConfig[];
@@ -146,7 +147,7 @@ export interface RawDoc {
   theme: ThemeConfig;
   themes?: Record<string, Partial<ThemeConfig>>;
   timezone?: string;
-  pages: { name: string; fit_screen?: boolean; public?: boolean; indexable?: boolean; description?: string; hidden?: boolean; theme?: string; rows: { name?: string; title?: string; height?: string; fill?: boolean; columns: { width: string; title?: string; widgets: RawWidget[] }[] }[] }[];
+  pages: { name: string; fit_screen?: boolean; public?: boolean; indexable?: boolean; description?: string; hidden?: boolean; collapse_navigation?: boolean; theme?: string; rows: { name?: string; title?: string; height?: string; fill?: boolean; columns: { width: string; title?: string; widgets: RawWidget[] }[] }[] }[];
 }
 
 // Fields that carry source/credential/schedule authority - changing them
@@ -466,6 +467,7 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
     const fit = page.fit_screen === true;
     const publicView = page.public === true;
     const hidden = page.hidden === true;
+    const collapseNav = page.collapse_navigation === true;
     const indexable = publicView && page.indexable === true;
     const description =
       typeof page.description === "string" && page.description.trim()
@@ -485,12 +487,13 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
       ...(fit ? { fit_screen: true } : {}),
       ...(publicView ? { public: true } : {}),
       ...(hidden ? { hidden: true } : {}),
+      ...(collapseNav ? { collapse_navigation: true } : {}),
       ...(indexable ? { indexable: true } : {}),
       ...(description ? { description } : {}),
       ...(pageTheme ? { theme: pageTheme } : {}),
       rows: docRows,
     });
-    return { name: pname, fit, publicView, indexable, description, hidden, theme: pageTheme, rows };
+    return { name: pname, fit, publicView, indexable, description, hidden, collapseNav, theme: pageTheme, rows };
   });
   // No injected color defaults: absent colors fall through to the
   // scheme-aware CSS fallbacks, which differ between light and dark to

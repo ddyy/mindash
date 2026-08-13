@@ -79,3 +79,11 @@ test("the shipped script wires the scheduler up and drops the blind interval", (
   // the attempt is stamped before the fetch, not in the callback
   assert.match(UI_JS, /lastAutoRefreshAttempt = Date\.now\(\);\s*\n\s*autoRefreshInFlight = true;/);
 });
+
+test("collapsed navigation is tab-local and dismissible", () => {
+  assert.match(UI_JS, /document\.querySelector\("\.nav-reveal"\)/);
+  assert.match(UI_JS, /document\.body\.classList\.toggle\("nav-open", open\)/);
+  assert.match(UI_JS, /if \(e\.key === "Escape"\) setNavOpen\(false\)/);
+  assert.match(UI_JS, /e\.target\.closest\("\.dashboard-chrome"\)/, "clicks within revealed navigation keep it open");
+  assert.doesNotMatch(UI_JS, /localStorage[^\n]*nav-open/, "temporary reveal state is not persisted");
+});

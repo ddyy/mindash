@@ -15,6 +15,14 @@ test("validateDoc: minimal doc — theme stays empty (defaults live in CSS fallb
   assert.deepEqual(runtime.theme, {});
 });
 
+test("pages round-trip the collapsed-navigation option", () => {
+  const { runtime, doc: normalized } = validateDoc(doc({ pages: [page({ collapse_navigation: true })] }));
+  assert.equal(runtime.pages[0]!.collapseNav, true);
+  assert.equal(normalized.pages[0]!.collapse_navigation, true);
+  const plain = validateDoc(doc()).doc;
+  assert.equal("collapse_navigation" in plain.pages[0]!, false);
+});
+
 test("validateDoc: bad column width rejected", () => {
   assert.throws(
     () => validateDoc({ pages: [{ name: "X", rows: [{ columns: [{ width: "7/9", widgets: [] }] }] }] }),
