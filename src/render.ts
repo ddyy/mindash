@@ -60,10 +60,23 @@ export function themeBodyCss(t: ThemeConfig): string {
   return `body { background-image: url("${cssString(t.background_image)}"); background-size: cover; background-position: center; background-attachment: fixed; }`;
 }
 
+// Cloudflare Web Analytics rides on TWO hosts: the beacon script comes
+// from static.cloudflareinsights.com and reports to cloudflareinsights.com,
+// so naming only the first trades a script-src violation for a connect-src
+// one. Opt-in via config; the default is the strict 'self'-only policy.
+export function scriptConnectFor(cfg: DashConfig): string {
+  return cfg.cloudflareAnalytics
+    ? "; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com"
+    : "; script-src 'self'; connect-src 'self'";
+}
+
 // Every theme image origin the browser may load. Internal /asset/ paths
 // are same-origin; external https URLs contribute their origin.
-export function imgSrcFor(cfg: DashConfig, theme: ThemeConfig = cfg.theme): string {
-  const refs = [theme.background_image, theme.logo, theme.favicon].filter((x): x is string => !!x);
+// pageFavicon: a page may override the theme's icon, and the CSP is
+// computed per page - so the override's origin has to be named here or
+// the browser blocks the very icon the page just asked for.
+export function imgSrcFor(cfg: DashConfig, theme: ThemeConfig = cfg.theme, pageFavicon?: string): string {
+  const refs = [theme.background_image, theme.logo, theme.favicon, pageFavicon].filter((x): x is string => !!x);
   const origins = new Set<string>();
   let self = false;
   for (const r of refs) {
@@ -534,6 +547,9 @@ export async function renderPage(env: Env, url: URL, slug?: string, authed = tru
     return html`<a href="${href}" class="${cls}" aria-label="${`${p.name}, public`}">${p.name}${badge}</a>`;
   });
 
+  // page icon beats theme icon beats the app's own mark: the most
+  // specific thing someone set is the one they meant.
+  const favicon = page.favicon ?? pageTheme.favicon;
   const kiosk = url.searchParams.get("kiosk") === "1";
   const collapseNav = page.collapseNav === true;
   const kioskHref = `${slug !== undefined ? `/p/${slug}` : "/"}?kiosk=1`;
@@ -546,7 +562,7 @@ export async function renderPage(env: Env, url: URL, slug?: string, authed = tru
 ${page.description ? html`<meta name="description" content="${page.description}">
 <meta property="og:title" content="${pageIndex === 0 ? (pageTheme.title ?? "mindash") : page.name}">
 <meta property="og:description" content="${page.description}">` : null}
-${pageTheme.favicon ? html`<link rel="icon" href="${pageTheme.favicon}">` : html`<link rel="icon" href="/favicon.svg" type="image/svg+xml">`}
+${favicon ? html`<link rel="icon" href="${favicon}">` : html`<link rel="icon" href="/favicon.svg" type="image/svg+xml">`}
 <link rel="stylesheet" href="${av("/styles.css")}">
 <link rel="stylesheet" href="${av("/custom.css")}">
 <style>:root { ${new SafeHtml(themeCssVars(pageTheme))} } ${new SafeHtml(themeBodyCss(pageTheme))}</style>
@@ -583,8 +599,8 @@ ${authed ? null : html`<footer class="site-footer"><a href="https://github.com/d
       "content-type": "text/html; charset=utf-8",
       "content-security-policy":
         `default-src 'none'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'${formActionFor(cfg)}${
-          "; script-src 'self'; connect-src 'self'"
-        }${imgSrcFor(cfg, pageTheme)}${frameSrcFor(cfg)}`,
+          scriptConnectFor(cfg)
+        }${imgSrcFor(cfg, pageTheme, page.favicon)}${frameSrcFor(cfg)}`,
       "referrer-policy": "no-referrer",
       ...(page.publicView && page.indexable ? {} : { "x-robots-tag": "noindex, nofollow" }),
       "x-content-type-options": "nosniff",

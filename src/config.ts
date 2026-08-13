@@ -105,6 +105,7 @@ export interface PageConfig {
   indexable?: boolean; // public pages only: allow search engines
   hidden?: boolean; // omit from the dashboard page menu (still reachable by URL)
   collapseNav?: boolean; // start dashboard chrome collapsed; reveal as an overlay
+  favicon?: string; // per-page browser-tab icon; overrides the theme's
   description?: string; // meta description + link-preview text
   theme?: string; // named preset overlaid on the global theme
   rows: RowConfig[];
@@ -137,6 +138,7 @@ export interface DashConfig {
   theme: ThemeConfig;
   themes: Record<string, Partial<ThemeConfig>>;
   timezone?: string; // IANA zone inherited by time-bearing widgets
+  cloudflareAnalytics?: boolean; // let the zone-injected Web Analytics beacon run
   pages: PageConfig[];
   widgets: WidgetConfig[];
 }
@@ -147,7 +149,8 @@ export interface RawDoc {
   theme: ThemeConfig;
   themes?: Record<string, Partial<ThemeConfig>>;
   timezone?: string;
-  pages: { name: string; fit_screen?: boolean; public?: boolean; indexable?: boolean; description?: string; hidden?: boolean; collapse_navigation?: boolean; theme?: string; rows: { name?: string; title?: string; height?: string; fill?: boolean; columns: { width: string; title?: string; widgets: RawWidget[] }[] }[] }[];
+  cloudflare_analytics?: boolean;
+  pages: { name: string; fit_screen?: boolean; public?: boolean; indexable?: boolean; description?: string; hidden?: boolean; collapse_navigation?: boolean; favicon?: string; theme?: string; rows: { name?: string; title?: string; height?: string; fill?: boolean; columns: { width: string; title?: string; widgets: RawWidget[] }[] }[] }[];
 }
 
 // Fields that carry source/credential/schedule authority - changing them
@@ -261,6 +264,30 @@ export const BUILTIN_THEMES: Record<string, Partial<ThemeConfig>> = {
 
 // Parse a theme mapping with every field optional - used for the global
 // theme (defaults applied by the caller) and for named presets.
+// An image reference the browser will be told to load: either something
+// uploaded here (same-origin, and the only kind that contacts nobody
+// else) or an explicit https URL. Shared by the theme and by per-page
+// favicons, so both spell the rule exactly once.
+export function parseAssetRef(v: unknown, where: string, name: string): string | undefined {
+  if (v === undefined || v === "") return undefined;
+  if (typeof v !== "string") throw new Error(`config: ${where}.${name} must be a string`);
+  const t = v.trim();
+  if (t === "") return undefined;
+  if (/^\/asset\/[A-Za-z0-9_-]+\.(png|jpe?g|webp|svg)$/.test(t)) return t;
+  try {
+    const u = new URL(t);
+    if (u.protocol !== "https:") throw new Error("x");
+    // Stored refs are CANONICAL (URL.href: lowercased scheme/host, no
+    // stray whitespace) so authorization checks can never be dodged by
+    // a non-canonical spelling; CSS/HTML-significant characters are
+    // rejected outright.
+    if (/["'\\<>\s]/.test(u.href)) throw new Error("x");
+    return u.href;
+  } catch {
+    throw new Error(`config: ${where}.${name} must be an uploaded /asset/ path or an https URL (no quotes/spaces/angle brackets)`);
+  }
+}
+
 export function parsePartialTheme(raw: unknown, where: string): Partial<ThemeConfig> {
   const themeRaw = (raw ?? {}) as Record<string, unknown>;
   const COLOR_OK = (x: string): boolean =>
@@ -327,25 +354,7 @@ export function parsePartialTheme(raw: unknown, where: string): Partial<ThemeCon
     }
     out.radius = rv as ThemeConfig["radius"];
   }
-  const assetRef = (v: unknown, name: string): string | undefined => {
-    if (v === undefined || v === "") return undefined;
-    if (typeof v !== "string") throw new Error(`config: ${where}.${name} must be a string`);
-    const t = v.trim();
-    if (t === "") return undefined;
-    if (/^\/asset\/[A-Za-z0-9_-]+\.(png|jpe?g|webp)$/.test(t)) return t;
-    try {
-      const u = new URL(t);
-      if (u.protocol !== "https:") throw new Error("x");
-      // Stored refs are CANONICAL (URL.href: lowercased scheme/host, no
-      // stray whitespace) so authorization checks can never be dodged by
-      // a non-canonical spelling; CSS/HTML-significant characters are
-      // rejected outright.
-      if (/["'\\<>\s]/.test(u.href)) throw new Error("x");
-      return u.href;
-    } catch {
-      throw new Error(`config: ${where}.${name} must be an uploaded /asset/ path or an https URL (no quotes/spaces/angle brackets)`);
-    }
-  };
+  const assetRef = (v: unknown, name: string): string | undefined => parseAssetRef(v, where, name);
   setIf("background_image", assetRef(themeRaw.background_image, "background_image"));
   setIf("logo", assetRef(themeRaw.logo, "logo"));
   setIf("favicon", assetRef(themeRaw.favicon, "favicon"));
@@ -370,6 +379,17 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
     }
     timezone = tz;
   }
+  // Cloudflare Web Analytics: the zone injects its beacon into the HTML
+  // AFTER this Worker returns, so the strict script-src blocks it and the
+  // browser logs a CSP violation while the analytics collect nothing.
+  // Opting in widens script-src/connect-src for those two hosts on the
+  // DASHBOARD only - settings, editor, login and setup keep the strict
+  // policy, because an auth surface is the last place to run a third-
+  // party script. Off (absent) leaves every CSP exactly as before.
+  if (r.cloudflare_analytics !== undefined && typeof r.cloudflare_analytics !== "boolean") {
+    throw new Error("config.cloudflare_analytics: expected true or false");
+  }
+  const cloudflareAnalytics = r.cloudflare_analytics === true;
   const themePartial = parsePartialTheme(r.theme, "theme");
   // Named presets: pages overlay one on the global theme.
   const themes: Record<string, Partial<ThemeConfig>> = {};
@@ -468,6 +488,7 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
     const publicView = page.public === true;
     const hidden = page.hidden === true;
     const collapseNav = page.collapse_navigation === true;
+    const favicon = parseAssetRef(page.favicon, `pages[${pi}]`, "favicon");
     const indexable = publicView && page.indexable === true;
     const description =
       typeof page.description === "string" && page.description.trim()
@@ -488,12 +509,13 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
       ...(publicView ? { public: true } : {}),
       ...(hidden ? { hidden: true } : {}),
       ...(collapseNav ? { collapse_navigation: true } : {}),
+      ...(favicon ? { favicon } : {}),
       ...(indexable ? { indexable: true } : {}),
       ...(description ? { description } : {}),
       ...(pageTheme ? { theme: pageTheme } : {}),
       rows: docRows,
     });
-    return { name: pname, fit, publicView, indexable, description, hidden, collapseNav, theme: pageTheme, rows };
+    return { name: pname, fit, publicView, indexable, description, hidden, collapseNav, favicon, theme: pageTheme, rows };
   });
   // No injected color defaults: absent colors fall through to the
   // scheme-aware CSS fallbacks, which differ between light and dark to
@@ -504,9 +526,10 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
       theme,
       ...(Object.keys(themes).length ? { themes } : {}),
       ...(timezone ? { timezone } : {}),
+      ...(cloudflareAnalytics ? { cloudflare_analytics: true } : {}),
       pages: docPages,
     },
-    runtime: { theme, themes, timezone, pages, widgets },
+    runtime: { theme, themes, timezone, cloudflareAnalytics, pages, widgets },
   };
 }
 
@@ -669,6 +692,25 @@ export function classifyDiff(base: RawDoc, next: RawDoc): ConfigDiff {
         diff.needsSources.push(`load ${key} from ${porigin} (preset ${pname})`);
       }
     }
+  }
+  // A page's own icon follows the same rule as the theme's images: an
+  // uploaded /asset/ file contacts nobody, but pointing a page favicon at
+  // someone else's host makes every viewer of that page call there, which
+  // a layout-scoped token has no business arranging.
+  const basePageIcon = new Map(base.pages.map((pg) => [pg.name, pg.favicon]));
+  for (const pg of next.pages) {
+    const origin = externalOrigin(pg.favicon);
+    if (origin && pg.favicon !== basePageIcon.get(pg.name)) {
+      diff.needsSources.push(`load favicon for page "${pg.name}" from ${origin}`);
+    }
+  }
+  // Letting the analytics beacon run widens script-src to a third-party
+  // host for every viewer, which is a security decision rather than a
+  // layout one - so a layout-scoped token cannot make it. Turning it back
+  // OFF only restores the stricter policy, so it stays unrestricted, the
+  // same asymmetry public/indexable use below.
+  if (next.cloudflare_analytics === true && base.cloudflare_analytics !== true) {
+    diff.needsSources.push("allow the Cloudflare Web Analytics beacon to run (widens script-src)");
   }
   // Exposure is a sources-scope decision: turning a page public lets
   // anyone read what its widgets display. Making it private again is not.

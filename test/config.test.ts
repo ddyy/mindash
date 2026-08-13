@@ -129,6 +129,28 @@ test("classifyDiff: making a page public needs sources; private does not", () =>
   assert.equal(classifyDiff(pub, priv).needsSources.length, 0);
 });
 
+test("cloudflare_analytics: round-trips, rejects non-booleans, defaults off", () => {
+  const off = validateDoc(doc());
+  assert.equal(off.runtime.cloudflareAnalytics, false);
+  assert.equal("cloudflare_analytics" in off.doc, false, "off must not be persisted");
+
+  const on = validateDoc(doc({ cloudflare_analytics: true }));
+  assert.equal(on.runtime.cloudflareAnalytics, true);
+  assert.equal(on.doc.cloudflare_analytics, true, "must survive the doc round-trip");
+
+  assert.throws(() => validateDoc(doc({ cloudflare_analytics: "yes" })), /true or false/);
+});
+
+// The whole point of keeping this in the config document was that an
+// MCP client could reach it; the scope gate is what makes that safe, so
+// it is the assertion that matters most in this file.
+test("classifyDiff: enabling analytics needs sources; disabling does not", () => {
+  const off = validateDoc(doc()).doc;
+  const on = validateDoc(doc({ cloudflare_analytics: true })).doc;
+  assert.ok(classifyDiff(off, on).needsSources.some((r) => /script-src/.test(r)));
+  assert.equal(classifyDiff(on, off).needsSources.length, 0);
+});
+
 test("enforceIdDiscipline: unknown ids rejected, new widgets get ids", () => {
   const cand = { pages: [{ name: "H", rows: [{ columns: [{ width: "full", widgets: [{ type: "hackernews" }, { id: "w_known" }] }] }] }] };
   const created = enforceIdDiscipline(cand, new Set(["w_known"]));
@@ -206,4 +228,58 @@ test("refresh intervals accept days and reject sub-minute or bad units", () => {
   assert.throws(() => w("30s"), /below 60s/);
   assert.throws(() => w("15 min"), /bad interval/);
   assert.throws(() => w("1w"), /bad interval/);
+});
+
+// A page favicon is the same security question as a theme image, asked
+// per page: an uploaded file contacts nobody, an external URL makes every
+// viewer of that page call someone else's host.
+test("page favicon: uploads are layout-scope, external URLs are not", () => {
+  const doc = (favicon?: string) => ({
+    theme: { accent: "210 90% 60%" },
+    pages: [{ name: "H", ...(favicon ? { favicon } : {}), rows: [{ columns: [{ width: "full", widgets: [] }] }] }],
+  });
+  const base = validateDoc(doc()).doc;
+
+  const uploaded = validateDoc(doc("/asset/favicon-abc123.svg")).doc;
+  assert.equal(uploaded.pages[0]!.favicon, "/asset/favicon-abc123.svg", "svg uploads are storable refs");
+  assert.deepEqual(classifyDiff(base, uploaded).needsSources, [], "an upload contacts nobody, so layout scope suffices");
+
+  const external = validateDoc(doc("https://icons.example/f.png")).doc;
+  assert.ok(
+    classifyDiff(base, external).needsSources.some((l) => l.includes("favicon") && l.includes("icons.example")),
+    "pointing a page at someone else's host is a sources-scope act",
+  );
+  // and it canonicalizes like every other stored ref
+  assert.equal(validateDoc(doc("  HTTPS://Icons.Example/f.png")).doc.pages[0]!.favicon, "https://icons.example/f.png");
+  assert.throws(() => validateDoc(doc("javascript:alert(1)")), /uploaded \/asset\/ path or an https URL/);
+});
+
+test("page favicon: the runtime page carries it and the doc round-trips it", () => {
+  const { runtime, doc } = validateDoc({
+    theme: {},
+    pages: [
+      { name: "A", favicon: "/asset/favicon-aaa.svg", rows: [{ columns: [{ width: "full", widgets: [] }] }] },
+      { name: "B", rows: [{ columns: [{ width: "full", widgets: [] }] }] },
+    ],
+  });
+  assert.equal(runtime.pages[0]!.favicon, "/asset/favicon-aaa.svg");
+  assert.equal(runtime.pages[1]!.favicon, undefined, "absent stays absent rather than becoming empty string");
+  assert.equal(doc.pages[0]!.favicon, "/asset/favicon-aaa.svg");
+  assert.ok(!("favicon" in doc.pages[1]!), "a page without one writes no key");
+});
+
+// The review dialog is the last thing read before publishing, so a change
+// it does not mention is a change nobody agreed to. Setting a page icon
+// summarized as "No changes" until this was covered.
+test("page favicon: the pre-publish summary says so", () => {
+  const doc = (favicon?: string) =>
+    validateDoc({
+      theme: {},
+      pages: [{ name: "Home", ...(favicon ? { favicon } : {}), rows: [{ columns: [{ width: "full", widgets: [] }] }] }],
+    }).doc;
+  const set = summarize(doc(), doc("/asset/favicon-abc.svg")).summary;
+  assert.ok(set.some((l) => l.includes("favicon") && l.includes("Home")), `expected a favicon line, got ${JSON.stringify(set)}`);
+  const cleared = summarize(doc("/asset/favicon-abc.svg"), doc()).summary;
+  assert.ok(cleared.some((l) => /Clear page "Home" favicon/.test(l)), `expected a clear line, got ${JSON.stringify(cleared)}`);
+  assert.deepEqual(summarize(doc("/asset/favicon-abc.svg"), doc("/asset/favicon-abc.svg")).summary, [], "unchanged stays quiet");
 });

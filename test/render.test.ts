@@ -329,3 +329,22 @@ test("clock and countdown carry format and size to the client", async () => {
   const out2 = (await renderMain(fakeEnv(), bad, 0)).value;
   assert.match(out2, /class="cd-remaining "/);
 });
+
+// The CSP is computed per page, so a page whose favicon lives on another
+// host has to contribute that origin - or the browser blocks the very
+// icon the page just asked for. Uploads are same-origin and add nothing.
+test("imgSrcFor: a page's own favicon reaches the policy", () => {
+  const { runtime } = validateDoc({
+    theme: { favicon: "/asset/favicon-theme.svg" },
+    pages: [
+      { name: "A", favicon: "https://icons.example/a.svg", rows: [{ columns: [{ width: "full", widgets: [] }] }] },
+      { name: "B", favicon: "/asset/favicon-b.svg", rows: [{ columns: [{ width: "full", widgets: [] }] }] },
+    ],
+  });
+  const withExternal = imgSrcFor(runtime, runtime.theme, runtime.pages[0]!.favicon);
+  assert.match(withExternal, /https:\/\/icons\.example/);
+  const withUpload = imgSrcFor(runtime, runtime.theme, runtime.pages[1]!.favicon);
+  assert.equal(withUpload, "; img-src 'self'", "an uploaded icon needs no extra origin");
+  // and a page that sets none is unaffected by another page's choice
+  assert.equal(imgSrcFor(runtime, runtime.theme), "; img-src 'self'");
+});

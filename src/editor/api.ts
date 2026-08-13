@@ -16,6 +16,7 @@ import { forceRefresh } from "../refresh";
 import { json } from "../auth/util";
 import { csrfToken } from "../settings";
 import type { SessionInfo } from "../auth/session";
+import { checkSvg } from "../svgsafe";
 
 // Editor API (plan: "Settings editor"). The client edits a DRAFT document;
 // nothing becomes active until save, which goes through publishConfig like
@@ -194,6 +195,23 @@ export function summarize(base: RawDoc, draft: RawDoc): {
       if (basePageTheme.has(pg.name) && prev !== pg.theme) {
         summary.push(`Set page "${pg.name}" theme to ${pg.theme ?? "default"}`);
       }
+    }
+  }
+  // The review dialog is the last thing anyone reads before publishing,
+  // so a change it does not mention is a change nobody agreed to. A page
+  // icon is small but visible on every tab, and it was silently absent
+  // here until a save that changed one summarized as "No changes."
+  {
+    const basePageIcon = new Map(base.pages.map((pg) => [pg.name, pg.favicon]));
+    for (const pg of draft.pages) {
+      if (!basePageIcon.has(pg.name)) continue;
+      const prev = basePageIcon.get(pg.name);
+      if (prev === pg.favicon) continue;
+      summary.push(
+        pg.favicon
+          ? `Set page "${pg.name}" favicon to ${pg.favicon}`
+          : `Clear page "${pg.name}" favicon`,
+      );
     }
   }
   const shape = (d: RawDoc) =>
@@ -426,6 +444,7 @@ function layoutSignature(doc: DocShape): string {
       th: p.theme ?? null,
       hid: p.hidden ?? null,
       cn: p.collapse_navigation ?? null,
+      fav: p.favicon ?? null,
       ix: p.indexable ?? null,
       d: p.description ?? null,
       r: ((p.rows ?? []) as Record<string, unknown>[]).map((r) => ({
@@ -802,6 +821,14 @@ export async function editorSample(req: Request, env: Env): Promise<Response> {
 // sniffed from magic bytes, never trusted from the request; keys are
 // content-hashed so the serve route can cache immutably.
 const ASSET_MAX_BYTES = 5 * 1024 * 1024;
+const FAVICON_MAX_BYTES = 64 * 1024;
+
+// Cheap pre-check before decoding: is this plausibly text starting an SVG
+// document? checkSvg does the real work on the decoded string.
+function looksLikeSvg(buf: Uint8Array): boolean {
+  const head = new TextDecoder().decode(buf.subarray(0, 512));
+  return /<\s*(?:\?xml|!--|svg)/i.test(head.replace(/^﻿/, "").trimStart());
+}
 function sniffImage(buf: Uint8Array): { ext: string; mime: string } | null {
   if (buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
     return { ext: "png", mime: "image/png" };
@@ -826,13 +853,29 @@ export async function editorUploadAsset(req: Request, env: Env, session: Session
   }
   const kind = url.searchParams.get("kind");
   if (kind !== "background" && kind !== "logo" && kind !== "widget" && kind !== "favicon") return json(400, { error: "kind must be background, logo, widget, or favicon" });
+  // A wallpaper and a favicon do not deserve the same ceiling: nothing
+  // stops a 5 MB hero image being set as a 32px icon that then ships on
+  // every page load, and there is no resizing step to save the user from
+  // it.
+  const cap = kind === "favicon" ? FAVICON_MAX_BYTES : ASSET_MAX_BYTES;
+  const capLabel = cap === FAVICON_MAX_BYTES ? "64 KB max for a favicon" : "5 MB max";
   const declared = Number(req.headers.get("content-length") ?? 0);
-  if (declared > ASSET_MAX_BYTES) return json(400, { error: "image too large (5 MB max)" });
+  if (declared > cap) return json(400, { error: `image too large (${capLabel})` });
   const body = new Uint8Array(await req.arrayBuffer());
   if (body.byteLength === 0) return json(400, { error: "empty upload" });
-  if (body.byteLength > ASSET_MAX_BYTES) return json(400, { error: "image too large (5 MB max)" });
-  const kindMeta = sniffImage(body);
-  if (!kindMeta) return json(400, { error: "not a PNG, JPEG, or WebP image" });
+  if (body.byteLength > cap) return json(400, { error: `image too large (${capLabel})` });
+  // SVG is text, so byte-sniffing cannot classify it - and it is the one
+  // format that can carry script, so it gets its own validator. The
+  // /asset/ response is sandboxed either way; this refuses to STORE the
+  // file at all, which keeps a hostile upload from sitting in the bucket
+  // waiting for a future change to serve it differently.
+  let kindMeta = sniffImage(body);
+  if (!kindMeta && looksLikeSvg(body)) {
+    const verdict = checkSvg(new TextDecoder().decode(body));
+    if (!verdict.ok) return json(400, { error: verdict.error ?? "unsafe SVG" });
+    kindMeta = { ext: "svg", mime: "image/svg+xml" };
+  }
+  if (!kindMeta) return json(400, { error: "not a PNG, JPEG, WebP, or SVG image" });
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", body));
   const hash = [...digest.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
   const key = `${kind}-${hash}.${kindMeta.ext}`;

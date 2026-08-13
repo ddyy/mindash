@@ -298,6 +298,57 @@ function renderTabs() {
   tabs.appendChild(add);
 }
 
+// Upload-and-attach control for an image field. The theme's logo and
+// favicon and a page's own favicon are the same interaction against
+// different objects, so they are the same control - target/key say which
+// object, onChange says who needs to hear about it.
+function assetPicker(root, opts) {
+  const { label, target, key, kind, help } = opts;
+  const wrapEl = el("div");
+  wrapEl.appendChild(el("label", null, label));
+  const rowEl = el("div", "clock-row");
+  const file = el("input");
+  file.type = "file";
+  file.accept = "image/png,image/jpeg,image/webp,image/svg+xml";
+  file.hidden = true;
+  const up = el("button", "btn-accent", target[key] ? "Replace\u2026" : "Upload\u2026");
+  up.addEventListener("click", () => file.click());
+  file.addEventListener("change", async () => {
+    const f = file.files && file.files[0];
+    if (!f) return;
+    up.disabled = true;
+    const sp = el("span", "btn-spinner");
+    up.appendChild(sp);
+    const res = await fetch("/settings/editor/upload-asset?kind=" + kind, {
+      method: "POST",
+      headers: { "content-type": f.type || "application/octet-stream", "x-csrf": state.csrf },
+      body: f,
+    });
+    const data = await res.json().catch(() => ({}));
+    sp.remove();
+    up.disabled = false;
+    // The server refuses unsafe SVG by NAME ("contains a <script>
+    // element"), so show its words rather than a generic failure - the
+    // user is about to edit the file and try again.
+    if (!data.path) { alert(data.error || "upload failed"); return; }
+    target[key] = data.path;
+    opts.onChange();
+  });
+  rowEl.appendChild(up);
+  if (target[key]) {
+    const cur = el("span", "field-path str-chip", String(target[key]).split("/").pop());
+    rowEl.appendChild(cur);
+    const rm = el("button", "ol-mini ol-del", "\u2715");
+    rm.title = "Remove";
+    rm.addEventListener("click", () => { delete target[key]; opts.onChange(); });
+    rowEl.appendChild(rm);
+  }
+  rowEl.appendChild(file);
+  wrapEl.appendChild(rowEl);
+  if (help) wrapEl.appendChild(el("p", "field-help", help));
+  root.appendChild(wrapEl);
+}
+
 // ---------- outline ----------
 function renderOutline() {
   const panel = $("outline");
@@ -2337,49 +2388,11 @@ function renderThemePanel(root) {
     root.appendChild(wrapEl);
   };
 
-  const uploadField = (labelText, key, kind, help) => {
-    const wrapEl = el("div");
-    wrapEl.appendChild(el("label", null, labelText));
-    const rowEl = el("div", "clock-row");
-    const file = el("input");
-    file.type = "file";
-    file.accept = "image/png,image/jpeg,image/webp";
-    file.hidden = true;
-    const up = el("button", "btn-accent", t[key] ? "Replace…" : "Upload…");
-    up.addEventListener("click", () => file.click());
-    file.addEventListener("change", async () => {
-      const f = file.files && file.files[0];
-      if (!f) return;
-      up.disabled = true;
-      const sp = el("span", "btn-spinner");
-      up.appendChild(sp);
-      const res = await fetch("/settings/editor/upload-asset?kind=" + kind, {
-        method: "POST",
-        headers: { "content-type": f.type || "application/octet-stream", "x-csrf": state.csrf },
-        body: f,
-      });
-      const data = await res.json().catch(() => ({}));
-      sp.remove();
-      up.disabled = false;
-      if (!data.path) { alert(data.error || "upload failed"); return; }
-      t[key] = data.path;
-      themeChanged();
-      renderInspector();
+  const uploadField = (labelText, key, kind, help) =>
+    assetPicker(root, {
+      label: labelText, target: t, key, kind, help,
+      onChange: () => { themeChanged(); renderInspector(); },
     });
-    rowEl.appendChild(up);
-    if (t[key]) {
-      const cur = el("span", "field-path str-chip", String(t[key]).split("/").pop());
-      rowEl.appendChild(cur);
-      const rm = el("button", "ol-mini ol-del", "✕");
-      rm.title = "Remove";
-      rm.addEventListener("click", () => { delete t[key]; themeChanged(); renderInspector(); });
-      rowEl.appendChild(rm);
-    }
-    rowEl.appendChild(file);
-    wrapEl.appendChild(rowEl);
-    if (help) wrapEl.appendChild(el("p", "field-help", help));
-    root.appendChild(wrapEl);
-  };
 
   field("Dashboard title", "title", "mindash");
   uploadField("Logo", "logo", "logo", "Shown beside the title. PNG/JPEG/WebP, 5 MB max.");
@@ -2518,6 +2531,14 @@ function renderInspector() {
     navWrap.appendChild(document.createTextNode(" Collapse navigation"));
     root.appendChild(navWrap);
     root.appendChild(el("p", "field-help", "Starts this dashboard with its header and page toolbar hidden. Reveal them from the top-right corner."));
+    assetPicker(root, {
+      label: "Page favicon",
+      target: p,
+      key: "favicon",
+      kind: "favicon",
+      help: "Browser-tab icon for THIS page. SVG or PNG (32-64px), 64 KB max. Falls back to the dashboard favicon.",
+      onChange: () => { changed(); renderInspector(); },
+    });
     const pubWrap = el("label", null, null);
     const pub = el("input");
     pub.type = "checkbox";
