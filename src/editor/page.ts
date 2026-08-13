@@ -110,7 +110,7 @@ ${globalHeader("edit", { title: runtime.theme.title, logo: runtime.theme.logo })
       // active config yet. Frames stay sandboxed; the dashboard's CSP
       // still pins frame-src to the published config's origins.
       "content-security-policy":
-        `default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-src https: http:; img-src 'self' https:`,
+        `default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; frame-src https: http:; img-src 'self' https:`,
       "referrer-policy": "no-referrer",
       "x-content-type-options": "nosniff",
       "cache-control": "no-store",

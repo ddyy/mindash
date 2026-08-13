@@ -60,7 +60,7 @@ function consentShell(body: ReturnType<typeof html>, status = 200, extraFormActi
     headers: {
       "content-type": "text/html; charset=utf-8",
       "content-security-policy":
-        `default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'${extraFormAction ? ` ${extraFormAction}` : ""}`,
+        `default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'${extraFormAction ? ` ${extraFormAction}` : ""}`,
       "referrer-policy": "no-referrer",
       "x-content-type-options": "nosniff",
       "cache-control": "no-store",

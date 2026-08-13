@@ -545,7 +545,7 @@ ${authed ? null : html`<footer class="site-footer"><a href="https://github.com/d
     headers: {
       "content-type": "text/html; charset=utf-8",
       "content-security-policy":
-        `default-src 'none'; style-src 'self' 'unsafe-inline'; base-uri 'none'; form-action 'self'${formActionFor(cfg)}${
+        `default-src 'none'; style-src 'self' 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'${formActionFor(cfg)}${
           "; script-src 'self'; connect-src 'self'"
         }${imgSrcFor(cfg, pageTheme)}${frameSrcFor(cfg)}`,
       "referrer-policy": "no-referrer",
