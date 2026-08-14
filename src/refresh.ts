@@ -1,4 +1,4 @@
-import { getConfig, isPullWidget, type PullWidgetConfig } from "./config";
+import { getConfig, isPullWidget, frozenWidgetIds, type PullWidgetConfig } from "./config";
 import { getModule } from "./widgets";
 import { logRetentionDays, logMaxPerWidget } from "./appsettings";
 
@@ -82,7 +82,11 @@ interface RefreshJob {
 }
 
 export async function sweep(env: Env): Promise<void> {
-  const pullWidgets = (await getConfig(env)).widgets.filter(isPullWidget);
+  const cfg = await getConfig(env);
+  // Frozen pages are skipped entirely - no state row, no lease, no fetch.
+  // Their cards keep rendering the payload they already hold.
+  const frozen = frozenWidgetIds(cfg.pages);
+  const pullWidgets = cfg.widgets.filter(isPullWidget).filter((w) => !frozen.has(w.id));
   if (pullWidgets.length === 0) return;
 
   await env.DB.batch(

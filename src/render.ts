@@ -208,6 +208,7 @@ function stamp(
   error: string | null,
   errorAt: number | null,
   now: number,
+  frozen = false,
 ): { text: string; cls: string; title: string } {
   if (error !== null) {
     return {
@@ -218,7 +219,10 @@ function stamp(
   }
   // No error recorded and yet far past due: the silent failure - a sweep
   // that stopped running records nothing, so nothing else surfaces it.
-  if (w.refreshSeconds > 0 && now - fetchedAt > w.refreshSeconds * 1000 * OVERDUE_FACTOR) {
+  // A frozen page is exactly that state ON PURPOSE, so it is excluded:
+  // every card on it would otherwise turn stale-red within three
+  // intervals and cry about a pipeline the operator switched off.
+  if (!frozen && w.refreshSeconds > 0 && now - fetchedAt > w.refreshSeconds * 1000 * OVERDUE_FACTOR) {
     return {
       text: `updated ${relativeTime(fetchedAt)} · overdue`,
       cls: "stamp-stale",
@@ -248,6 +252,7 @@ function widgetSection(
   error: string | null,
   refresh = false,
   errorAt: number | null = null,
+  frozen = false,
 ): SafeHtml {
   let body: SafeHtml;
   if (payload) {
@@ -260,7 +265,7 @@ function widgetSection(
     body = html`<p class="pending">refresh pending…</p>`;
   }
   const mark = payload
-    ? stamp(w, payload.fetchedAt, error, errorAt, Date.now())
+    ? stamp(w, payload.fetchedAt, error, errorAt, Date.now(), frozen)
     : error !== null
       ? failedStamp(error, errorAt)
       : null;
@@ -352,7 +357,7 @@ export async function renderMain(env: Env, cfg: DashConfig, pageIndex: number, r
         const row = rows.get(w.id);
         const { payload, error } = await loadWidgetData(env, w, row);
         // updated_at is the failing attempt's time whenever last_error is set
-        sections.set(w.id, widgetSection(w, payload, error, refreshButtons, row?.updated_at ?? null));
+        sections.set(w.id, widgetSection(w, payload, error, refreshButtons, row?.updated_at ?? null, page.frozen === true));
         return;
       }
       if (w.type === "log") {
@@ -611,7 +616,10 @@ ${authed ? null : html`<footer class="site-footer"><a href="https://github.com/d
       // Authed pages are never cached; anonymous PUBLIC pages get a short
       // browser TTL so refreshes and repeat visitors don't spend Worker
       // invocations on unchanged HTML (2.5 min < the 5-min auto-refresh).
-      "cache-control": authed ? "no-store" : "public, max-age=150",
+      // A FROZEN page holds an hour instead: nothing refreshes it, so the
+      // HTML cannot change on its own. Browser-side only (no s-maxage, no
+      // Cache API), so a hard reload still fetches immediately.
+      "cache-control": authed ? "no-store" : page.frozen ? "public, max-age=3600" : "public, max-age=150",
     },
   });
 }

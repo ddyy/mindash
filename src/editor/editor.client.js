@@ -2524,6 +2524,20 @@ function renderInspector() {
     hideWrap.appendChild(document.createTextNode(" Hide from page menu"));
     root.appendChild(hideWrap);
     root.appendChild(el("p", "field-help", "The page stays reachable by its URL; it just isn't listed in the dashboard's tabs."));
+    const freezeWrap = el("label", null, null);
+    const freeze = el("input");
+    freeze.type = "checkbox";
+    freeze.style.width = "auto";
+    freeze.checked = p.frozen === true;
+    freeze.addEventListener("change", () => {
+      if (freeze.checked) p.frozen = true;
+      else delete p.frozen;
+      changed();
+    });
+    freezeWrap.appendChild(freeze);
+    freezeWrap.appendChild(document.createTextNode(" Freeze (stop refreshing)"));
+    root.appendChild(freezeWrap);
+    root.appendChild(el("p", "field-help", "Cards keep showing the data they already hold and cost nothing to leave running. A card shared with an unfrozen page keeps refreshing there. Manual refresh still works."));
     const navWrap = el("label", null, null);
     const collapseNav = el("input");
     collapseNav.type = "checkbox";

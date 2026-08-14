@@ -104,6 +104,7 @@ export interface PageConfig {
   publicView?: boolean; // render without a session (read-only; noindex unless indexable)
   indexable?: boolean; // public pages only: allow search engines
   hidden?: boolean; // omit from the dashboard page menu (still reachable by URL)
+  frozen?: boolean; // stop the sweep from refreshing this page's cards (see frozenWidgetIds)
   collapseNav?: boolean; // start dashboard chrome collapsed; reveal as an overlay
   favicon?: string; // per-page browser-tab icon; overrides the theme's
   description?: string; // meta description + link-preview text
@@ -148,7 +149,7 @@ export interface RawDoc {
   theme: ThemeConfig;
   themes?: Record<string, Partial<ThemeConfig>>;
   timezone?: string;
-  pages: { name: string; fit_screen?: boolean; public?: boolean; indexable?: boolean; description?: string; hidden?: boolean; collapse_navigation?: boolean; favicon?: string; theme?: string; rows: { name?: string; title?: string; height?: string; fill?: boolean; columns: { width: string; title?: string; widgets: RawWidget[] }[] }[] }[];
+  pages: { name: string; fit_screen?: boolean; public?: boolean; indexable?: boolean; description?: string; hidden?: boolean; frozen?: boolean; collapse_navigation?: boolean; favicon?: string; theme?: string; rows: { name?: string; title?: string; height?: string; fill?: boolean; columns: { width: string; title?: string; widgets: RawWidget[] }[] }[] }[];
 }
 
 // Fields that carry source/credential/schedule authority - changing them
@@ -474,6 +475,7 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
     const fit = page.fit_screen === true;
     const publicView = page.public === true;
     const hidden = page.hidden === true;
+    const frozen = page.frozen === true;
     const collapseNav = page.collapse_navigation === true;
     const favicon = parseAssetRef(page.favicon, `pages[${pi}]`, "favicon");
     const indexable = publicView && page.indexable === true;
@@ -495,6 +497,7 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
       ...(fit ? { fit_screen: true } : {}),
       ...(publicView ? { public: true } : {}),
       ...(hidden ? { hidden: true } : {}),
+      ...(frozen ? { frozen: true } : {}),
       ...(collapseNav ? { collapse_navigation: true } : {}),
       ...(favicon ? { favicon } : {}),
       ...(indexable ? { indexable: true } : {}),
@@ -502,7 +505,7 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
       ...(pageTheme ? { theme: pageTheme } : {}),
       rows: docRows,
     });
-    return { name: pname, fit, publicView, indexable, description, hidden, collapseNav, favicon, theme: pageTheme, rows };
+    return { name: pname, fit, publicView, indexable, description, hidden, frozen, collapseNav, favicon, theme: pageTheme, rows };
   });
   // No injected color defaults: absent colors fall through to the
   // scheme-aware CSS fallbacks, which differ between light and dark to
@@ -521,6 +524,28 @@ export function validateDoc(raw: unknown): { doc: RawDoc; runtime: DashConfig } 
 
 export function docWidgets(doc: RawDoc): RawWidget[] {
   return doc.pages.flatMap((p) => p.rows.flatMap((r) => r.columns.flatMap((c) => c.widgets)));
+}
+
+// Widgets the sweep must leave alone: a frozen page stops costing
+// fetches, subrequests and D1 writes, which is what makes a public demo
+// board affordable to leave running.
+//
+// Membership is unambiguous because instance ids are unique across the
+// WHOLE document (validateDoc rejects a duplicate id outright), so a card
+// belongs to exactly one page and cannot be frozen on one while live on
+// another. Manual refresh - the editor button, refresh_widget over MCP -
+// still works: freezing removes ambient cost, not deliberate action.
+export function frozenWidgetIds(pages: PageConfig[]): Set<string> {
+  const frozen = new Set<string>();
+  for (const page of pages) {
+    if (!page.frozen) continue;
+    for (const row of page.rows) {
+      for (const col of row.columns) {
+        for (const w of col.widgets) frozen.add(w.id);
+      }
+    }
+  }
+  return frozen;
 }
 
 // ---------- id discipline ----------
