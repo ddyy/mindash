@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { validateDoc } from "../src/config";
-import { themeCssVars, themeBodyCss, effectiveTheme, imgSrcFor, formActionFor, frameSrcFor, renderMain } from "../src/render";
+import { themeCssVars, themeBodyCss, effectiveTheme, imgSrcFor, formActionFor, frameSrcFor, renderMain, pageTitle } from "../src/render";
 
 // renderMain touches env only for pull/heartbeat widgets; widget-free
 // docs render with a bare stub.
@@ -347,4 +347,15 @@ test("imgSrcFor: a page's own favicon reaches the policy", () => {
   assert.equal(withUpload, "; img-src 'self'", "an uploaded icon needs no extra origin");
   // and a page that sets none is unaffected by another page's choice
   assert.equal(imgSrcFor(runtime, runtime.theme), "; img-src 'self'");
+});
+
+// Tabs and search results truncate from the right, so the page name has
+// to lead or every tab from one dashboard looks identical.
+test("page title: page name leads, site title follows", () => {
+  assert.equal(pageTitle("mindash", "Homelab", false), "Homelab - mindash");
+  assert.equal(pageTitle("ops board", "Row A", false), "Row A - ops board");
+});
+
+test("page title: the front page carries the bare site title", () => {
+  assert.equal(pageTitle("mindash", "Home", true), "mindash");
 });

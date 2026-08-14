@@ -527,6 +527,16 @@ export function pageSlugs(cfg: DashConfig): string[] {
   });
 }
 
+// Browser tabs and search results truncate from the RIGHT, so the word
+// that tells two of them apart has to come first: "Homelab - mindash"
+// still reads as Homelab in a narrow tab, while "mindash - Homelab"
+// reads as every other tab from the same dashboard. The front page is
+// the dashboard itself and carries the bare site title, with no suffix
+// to repeat back at the reader.
+export function pageTitle(siteTitle: string, pageName: string, isFrontPage: boolean): string {
+  return isFrontPage ? siteTitle : `${pageName} - ${siteTitle}`;
+}
+
 export async function renderPage(env: Env, url: URL, slug?: string, authed = true): Promise<Response> {
   // Issued together: the settings row is an independent lookup, so making
   // it serial would add a whole round trip to every page load.
@@ -580,7 +590,7 @@ export async function renderPage(env: Env, url: URL, slug?: string, authed = tru
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${pageIndex === 0 ? (pageTheme.title ?? "mindash") : `${pageTheme.title ?? "mindash"} - ${page.name}`}</title>
+<title>${pageTitle(pageTheme.title ?? "mindash", page.name, pageIndex === 0)}</title>
 ${page.description ? html`<meta name="description" content="${page.description}">
 <meta property="og:title" content="${pageIndex === 0 ? (pageTheme.title ?? "mindash") : page.name}">
 <meta property="og:description" content="${page.description}">` : null}
