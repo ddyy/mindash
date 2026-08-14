@@ -85,3 +85,75 @@ test("frozen: cards do not claim to be overdue", async () => {
   assert.ok(!frozenOut.includes("overdue"), "a frozen card must not be marked overdue");
   assert.match(liveOut, /overdue/, "an unfrozen card this stale still is");
 });
+
+// ---------- per-widget pause ----------
+//
+// Pause shares the sweep-skip with frozen but is its OPPOSITE in
+// appearance: a frozen page is a demo that must read as live, so it says
+// nothing; a paused card must say so, or it is indistinguishable from
+// one whose pipeline quietly died.
+
+const paused = (id: string, name: string) => ({ ...feed(id, name), paused: true });
+
+test("paused: the flag round-trips and is stored only when set", () => {
+  const { doc, runtime } = validateDoc({ pages: [page("P", [paused("w_1", "a"), feed("w_2", "b")])] });
+  const raw = doc.pages[0]!.rows[0]!.columns[0]!.widgets;
+  assert.equal(raw[0]!.paused, true);
+  assert.equal("paused" in raw[1]!, false);
+  assert.equal(runtime.widgets.find((w) => w.id === "w_1")!.paused, true);
+  assert.equal(runtime.widgets.find((w) => w.id === "w_2")!.paused, undefined);
+});
+
+test("paused: the editor checkbox value is accepted like expand's", () => {
+  const { runtime } = validateDoc({ pages: [page("P", [{ ...feed("w_1", "a"), paused: "yes" }])] });
+  assert.equal(runtime.widgets[0]!.paused, true);
+});
+
+test("paused: a paused card is excluded from the sweep, its siblings are not", () => {
+  const { runtime } = validateDoc({ pages: [page("P", [paused("w_1", "a"), feed("w_2", "b")])] });
+  const skip = frozenWidgetIds(runtime.pages);
+  assert.equal(skip.has("w_1"), true);
+  assert.equal(skip.has("w_2"), false, "pausing one card must not stop its neighbours");
+});
+
+test("paused: page-frozen and card-paused both land in the skip set", () => {
+  const { runtime } = validateDoc({
+    pages: [page("Demo", [feed("w_1", "a")], true), page("Live", [paused("w_2", "b"), feed("w_3", "c")])],
+  });
+  const skip = frozenWidgetIds(runtime.pages);
+  assert.deepEqual([...skip].sort(), ["w_1", "w_2"]);
+});
+
+test("paused says so on the card; frozen stays silent", async () => {
+  const { runtime } = validateDoc({
+    pages: [page("Demo", [feed("w_1", "a")], true), page("Live", [paused("w_2", "b")])],
+  });
+  // Both cards are a day stale against a 15m interval: without their
+  // flags each would go stale-red as "overdue".
+  const stale = Date.now() - 86400_000;
+  const payload = JSON.stringify({ fetchedAt: stale, data: { items: [] } });
+  const row = (id: string) => ({
+    instance_id: id, source_rev: 1, payload, current_key: null, prev_key: null,
+    fetched_at: stale, last_error: null, updated_at: stale,
+  });
+  const env = {
+    DB: {
+      prepare: () => ({
+        bind: () => ({
+          all: async () => ({ results: [row("w_1"), row("w_2")] }),
+          first: async () => null,
+          run: async () => ({ meta: {} }),
+        }),
+      }),
+    },
+  } as never;
+
+  const frozenHtml = (await renderMain(env, runtime, 0, true)).value;
+  assert.equal(/paused/.test(frozenHtml), false, "a frozen demo page must not advertise itself");
+  assert.equal(/overdue/.test(frozenHtml), false, "and must not go stale-red either");
+
+  const pausedHtml = (await renderMain(env, runtime, 1, true)).value;
+  assert.match(pausedHtml, /paused/, "a paused card must say so");
+  assert.equal(/overdue/.test(pausedHtml), false, "paused is deliberate, so never overdue");
+  assert.equal(/stamp-stale/.test(pausedHtml), false, "and never the fault colour");
+});

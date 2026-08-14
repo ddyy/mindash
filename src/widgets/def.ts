@@ -23,6 +23,12 @@ export interface WidgetCommon {
   // it a card is its natural height, so one marked card absorbs the
   // slack instead of every card stretching a little.
   expand?: boolean;
+  // Pull widgets only: the sweep skips this card entirely. For a source
+  // that is broken or rate-limiting, where deleting the card would lose
+  // its id, its field mapping and its history. The card keeps rendering
+  // whatever it last fetched, and a MANUAL refresh still runs - that is
+  // how you test the upstream before resuming the schedule.
+  paused?: boolean;
   // The document's timezone, carried to every widget so time-bearing ones
   // (clock, countdown, calendar) inherit it instead of each defaulting to
   // UTC. A widget's own zone field still wins.
@@ -97,6 +103,17 @@ export const COMMON_FIELDS: FieldDesc[] = [
     help: "Overrides the theme accent for this card only: title, links, spinner. Empty = inherit.",
   },
 ];
+
+// Appended only to types that FETCH (def.fetchData present) - see the
+// derivation in ./index.ts. A clock or a note has no schedule to pause,
+// and the push widgets are fed from outside rather than swept.
+export const PAUSE_FIELD: FieldDesc = {
+  key: "paused",
+  label: "Pause refreshing",
+  kind: "checkbox",
+  advanced: true,
+  help: "The scheduled sweep skips this card; it keeps showing its last result. Refresh now still works, so you can test the source before resuming.",
+};
 
 // ---------- parse helpers ----------
 

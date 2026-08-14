@@ -209,6 +209,7 @@ function stamp(
   errorAt: number | null,
   now: number,
   frozen = false,
+  paused = false,
 ): { text: string; cls: string; title: string } {
   if (error !== null) {
     return {
@@ -217,12 +218,24 @@ function stamp(
       title: `last fetch failed${errorAt ? ` ${relativeTime(errorAt)}` : ""}: ${error}`,
     };
   }
+  // Paused says so, in the slot that already answers "how fresh is
+  // this?". Without it the card is indistinguishable from one whose
+  // pipeline quietly died - the exact ambiguity pausing is meant to
+  // remove. (A frozen PAGE stays silent by design: it is a demo that
+  // must read as live.)
+  if (paused) {
+    return {
+      text: `updated ${relativeTime(fetchedAt)} · paused`,
+      cls: "stamp-paused",
+      title: "the scheduled refresh is switched off for this card - Refresh now still works",
+    };
+  }
   // No error recorded and yet far past due: the silent failure - a sweep
   // that stopped running records nothing, so nothing else surfaces it.
   // A frozen page is exactly that state ON PURPOSE, so it is excluded:
   // every card on it would otherwise turn stale-red within three
   // intervals and cry about a pipeline the operator switched off.
-  if (!frozen && w.refreshSeconds > 0 && now - fetchedAt > w.refreshSeconds * 1000 * OVERDUE_FACTOR) {
+  if (!frozen && !paused && w.refreshSeconds > 0 && now - fetchedAt > w.refreshSeconds * 1000 * OVERDUE_FACTOR) {
     return {
       text: `updated ${relativeTime(fetchedAt)} · overdue`,
       cls: "stamp-stale",
@@ -265,7 +278,7 @@ function widgetSection(
     body = html`<p class="pending">refresh pending…</p>`;
   }
   const mark = payload
-    ? stamp(w, payload.fetchedAt, error, errorAt, Date.now(), frozen)
+    ? stamp(w, payload.fetchedAt, error, errorAt, Date.now(), frozen, w.paused === true)
     : error !== null
       ? failedStamp(error, errorAt)
       : null;

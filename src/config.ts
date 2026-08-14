@@ -208,6 +208,10 @@ function parseWidget(w: RawWidget, where: string, timezone?: string): WidgetConf
     // checkbox, true from YAML or MCP. Stored only when set, so an
     // unmarked card adds nothing to the document.
     ...(w.expand === true || w.expand === "yes" ? { expand: true } : {}),
+    // Same "true from YAML/MCP, yes from the editor checkbox" shape as
+    // expand. Parsed for every type so the flag is not silently dropped
+    // if a card changes type; only pull types ever read it.
+    ...(w.paused === true || w.paused === "yes" ? { paused: true } : {}),
   };
   if (w.type === "heartbeat") {
     const tokenSecret =
@@ -535,13 +539,24 @@ export function docWidgets(doc: RawDoc): RawWidget[] {
 // belongs to exactly one page and cannot be frozen on one while live on
 // another. Manual refresh - the editor button, refresh_widget over MCP -
 // still works: freezing removes ambient cost, not deliberate action.
+// The set is the UNION of page-frozen and card-paused. They want the
+// same thing FROM THE SWEEP - skip it, and do not cry that it is overdue
+// - so the cost side is shared here rather than duplicated.
+//
+// They are deliberately opposite in APPEARANCE, which is why the render
+// path keeps them apart. A frozen page is a demo that must look live, so
+// it says nothing. A paused card is a source the owner switched off on
+// purpose, so it says so: unmarked, it would be indistinguishable from a
+// card whose pipeline quietly died, which is the confusion this exists
+// to prevent.
 export function frozenWidgetIds(pages: PageConfig[]): Set<string> {
   const frozen = new Set<string>();
   for (const page of pages) {
-    if (!page.frozen) continue;
     for (const row of page.rows) {
       for (const col of row.columns) {
-        for (const w of col.widgets) frozen.add(w.id);
+        for (const w of col.widgets) {
+          if (page.frozen || w.paused) frozen.add(w.id);
+        }
       }
     }
   }

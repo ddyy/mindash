@@ -1,6 +1,6 @@
 import type { PullWidgetConfig } from "../config";
 import type { SafeHtml } from "../html";
-import { type RawWidget, COMMON_FIELDS, type WidgetDef, type WidgetFormDesc } from "./def";
+import { type RawWidget, COMMON_FIELDS, PAUSE_FIELD, type WidgetDef, type WidgetFormDesc } from "./def";
 import { def as rss } from "./rss";
 import { def as weather } from "./weather";
 import { def as hackernews } from "./hackernews";
@@ -121,7 +121,8 @@ export function widgetFormsFromDefs(): WidgetFormDesc[] {
       category: def.meta.category,
       description: def.meta.description,
       ...(def.meta.requirements !== undefined ? { requirements: def.meta.requirements } : {}),
-      fields: [...COMMON_FIELDS, ...def.form],
+      // Pause is offered only where there is a schedule to pause.
+      fields: [...COMMON_FIELDS, ...(def.fetchData ? [PAUSE_FIELD] : []), ...def.form],
     };
   });
 }

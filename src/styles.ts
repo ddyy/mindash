@@ -510,6 +510,11 @@ section.access[id] { scroll-margin-top: 1rem; }
    what misleads, so it carries the mark. Healthy cards stay unmarked -
    a signal shown on every card is not a signal. */
 .card-stamp .stamp-stale { color: var(--negative); }
+/* Paused is a CHOICE, not a fault, so it must not borrow the stale red -
+   that colour means "something is wrong" everywhere else on the page.
+   The card body stays at full contrast: the data is real and worth
+   reading, which is the whole reason for pausing instead of deleting. */
+.card-stamp .stamp-paused { color: var(--muted); font-style: italic; }
 a.w-log.stamp-stale:hover { color: var(--negative); filter: brightness(1.15); }
 #msg p { margin: 0.4rem 0 0; }
 .msg-raw { font-size: 0.72rem; opacity: 0.7; overflow-wrap: anywhere; }
