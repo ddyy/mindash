@@ -4,6 +4,7 @@ import { validateDoc } from "../src/config";
 import { renderMain } from "../src/render";
 import { CSS } from "../src/styles";
 import { COMMON_FIELDS } from "../src/widgets/def";
+import { EDITOR_JS } from "../src/editor/client";
 
 const fakeEnv = () =>
   ({
@@ -60,6 +61,18 @@ test("expand: offered on every widget type, in the main form", () => {
   assert.equal(field!.kind, "checkbox");
   // layout is a normal thing to reach for - not buried under Advanced
   assert.notEqual(field!.advanced, true);
+  // On for newly added cards. Existing cards are unaffected: the prefill
+  // is applied by the gallery when it CONSTRUCTS a widget, and validation
+  // still stores expand only when the document says so.
+  assert.equal(field!.prefill, "yes");
+});
+
+// The gallery's prefill loop writes booleans for checkboxes, because the
+// inspector's box renders from `=== true`. A raw "yes" string would read
+// as expanded in config while showing an unchecked box in the editor.
+test("expand: the checkbox prefill lands as a boolean, not a string", () => {
+  assert.match(EDITOR_JS, /fd\.kind === "checkbox" && fd\.prefill\) w\[fd\.key\] = true;/);
+  assert.match(EDITOR_JS, /box\.checked = w\[desc\.key\] === true;/);
 });
 
 // Four card shells render sections - pull, static, log, heartbeat - and

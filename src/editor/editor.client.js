@@ -2980,6 +2980,11 @@ function renderGallery(q) {
           else if (fd.kind === "strlist" && fd.prefill) w[fd.key] = fd.prefill.split(/[,s]+/).filter(Boolean);
           else if (fd.kind === "json" && fd.prefill) { try { w[fd.key] = JSON.parse(fd.prefill); } catch (e) {} }
           else if (fd.kind === "fieldmap" && fd.prefill) w[fd.key] = linesToFields(fd.prefill);
+          // A checkbox prefill lands as the BOOLEAN the box itself writes
+          // on change - the control renders from `=== true`, so storing
+          // the raw "yes" string would leave it visibly unchecked while
+          // the config read it as on.
+          else if (fd.kind === "checkbox" && fd.prefill) w[fd.key] = true;
           else if (fd.prefill !== undefined && w[fd.key] === undefined) w[fd.key] = fd.kind === "number" ? Number(fd.prefill) : fd.prefill;
         }
         if (f.type === "mcp" && !w.description) w.description = mcpQueryText(w);

@@ -78,9 +78,16 @@ export const COMMON_FIELDS: FieldDesc[] = [
   { key: "description", label: "Description", kind: "textarea", rows: 3, placeholder: "Optional line under the title" },
   {
     key: "expand",
+    // On for newly added cards: a fresh card in a filling column should
+    // occupy the space rather than leave a gap under itself. It stays a
+    // per-card choice - uncheck it and the card keeps its natural size -
+    // and it is inert outside a fit page or a fill row, where the CSS
+    // never matches .expand at all. Existing cards are untouched: this
+    // is a creation default, not a change to how expand is read.
+    prefill: "yes",
     label: "Expand to fill the column",
     kind: "checkbox",
-    help: "Takes the leftover height in this column. Leave it off and the card keeps its natural size.",
+    help: "Takes the leftover height in this column. Uncheck it and the card keeps its natural size.",
   },
   {
     key: "accent",
