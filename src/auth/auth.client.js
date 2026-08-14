@@ -302,9 +302,8 @@ if (approveForm && approveForm.dataset.stepup === "1") {
 }
 
 // /settings/log: every filter control submits on change - the widget
-// picker and the failures-only checkbox alike. Binding the select alone
-// left the checkbox dead, since the Filter button is hidden below. The
-// button stays in the markup so the form still works without JS.
+// picker and the failures-only checkbox alike. The Filter button stays
+// in the markup (hidden here) so the form still works without JS.
 const logFilter = document.querySelector("form.log-filter");
 if (logFilter) {
   const go = logFilter.querySelector("button[type=submit]");
@@ -312,4 +311,18 @@ if (logFilter) {
   logFilter.querySelectorAll("select, input[type=checkbox]").forEach((ctl) => {
     ctl.addEventListener("change", () => logFilter.submit());
   });
+  // The widget picker is a datalist-backed text input, and a bare
+  // "change" listener would also fire on blur after a half-typed word,
+  // yanking the page out from under someone mid-thought. Submit only
+  // when the value is decisive: empty (back to everything), or exactly
+  // one of the datalist's options - which is what a click on a
+  // suggestion produces. Enter still submits natively for typed text.
+  const picker = logFilter.querySelector("input[list]");
+  if (picker) {
+    const options = () => [...(document.getElementById(picker.getAttribute("list"))?.options ?? [])].map((o) => o.value);
+    picker.addEventListener("change", () => {
+      const v = picker.value.trim();
+      if (v === "" || options().includes(v)) logFilter.submit();
+    });
+  }
 }
