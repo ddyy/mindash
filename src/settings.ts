@@ -427,9 +427,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
   // One selector, two kinds of value: a widget instance id, or
   // "page:<name>" for every widget on that page. Same param either way,
   // so the cursor and the failures toggle compose with both.
-  const selection = url.searchParams.get("widget") ?? "";
-  const pageName = selection.startsWith("page:") ? selection.slice(5) : "";
-  const widgetId = pageName ? "" : selection;
+  const rawSelection = url.searchParams.get("widget") ?? "";
   // Keyset cursor: "older" pages ask for entries strictly before the last
   // row shown. Correct while new rows land (page numbers would drift) and
   // it stays one indexed range scan.
@@ -444,6 +442,23 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
   for (const p of cfg.pages) {
     for (const r of p.rows) for (const c of r.columns) for (const w of c.widgets) pageOf.set(w.id, p.name);
   }
+  // The selector is a search box backed by a datalist, so what arrives in
+  // ?widget= is one of three things: an instance id (every "updated 5m
+  // ago" link on a card points at one, and those must keep working), a
+  // "page:<name>", or the human label the datalist offered. Anything
+  // unrecognised filters to nothing-in-particular rather than to an empty
+  // result - a typo should show the whole log, not look like a dead
+  // instance.
+  const labelOf = (id: string, title: string, type: string) => `${pageOf.get(id) ?? "unplaced"} / ${title} (${type})`;
+  const canonical = new Map<string, string>();
+  for (const p of cfg.pages) canonical.set(`all on ${p.name.toLowerCase()}`, `page:${p.name}`);
+  for (const w of cfg.widgets) canonical.set(labelOf(w.id, w.title, w.type).toLowerCase(), w.id);
+  const selection =
+    byId.has(rawSelection) || rawSelection.startsWith("page:")
+      ? rawSelection
+      : (canonical.get(rawSelection.trim().toLowerCase()) ?? "");
+  const pageName = selection.startsWith("page:") ? selection.slice(5) : "";
+  const widgetId = pageName ? "" : selection;
   const pageIds = pageName
     ? cfg.pages
         .filter((p) => p.name === pageName)
@@ -618,17 +633,27 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
     html`<section class="widget access">
       <h2>Widget activity log</h2>
       <form method="get" action="/settings/log" class="log-filter">
-        <select name="widget" aria-label="Filter by widget">
-          <option value="">All widgets</option>
+        <!-- A search box, not a <select>: an instance with fifty cards
+             makes a dropdown a scrolling exercise. datalist gives native
+             type-to-filter with no JavaScript, which matters here because
+             settings pages ship no script beyond auth.js and the CSP
+             forbids an inline one. Options are labelled "<page> / <title>
+             (<type>)" so the page - the thing that tells two cards called
+             "Uptime" apart - is what you type against. -->
+        <input
+          name="widget"
+          list="log-widget-options"
+          class="log-widget-search"
+          autocomplete="off"
+          placeholder="All widgets - type to search"
+          aria-label="Filter by widget"
+          value="${widgetId ? labelOf(widgetId, byId.get(widgetId)?.title ?? widgetId, byId.get(widgetId)?.type ?? "?") : pageName ? `All on ${pageName}` : ""}">
+        <datalist id="log-widget-options">
           ${byPage.map(
-            (g) => html`<optgroup label="${g.page}">
-            <option value="page:${g.page}"${pageName === g.page ? new SafeHtml(" selected") : null}>All on ${g.page}</option>
-            ${g.widgets.map(
-              (w) => html`<option value="${w.id}"${widgetId === w.id ? new SafeHtml(" selected") : null}>${w.title} (${w.type})</option>`,
-            )}
-          </optgroup>`,
+            (g) => html`<option value="All on ${g.page}"></option>
+            ${g.widgets.map((w) => html`<option value="${labelOf(w.id, w.title, w.type)}"></option>`)}`,
           )}
-        </select>
+        </datalist>
         <label class="log-failonly"><input type="checkbox" name="fail" value="1"${
           failOnly ? new SafeHtml(" checked") : null
         }> Failures only</label>

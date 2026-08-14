@@ -463,6 +463,9 @@ section.access[id] { scroll-margin-top: 1rem; }
 .log-stats { margin-top: -0.35rem; font-size: 0.78rem; }
 .log-filter { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0 0.2rem; flex-wrap: wrap; }
 .log-filter select { max-width: 22rem; }
+/* the widget search box: the global input rule stretches controls to full
+   width, which would push the failures toggle onto a line of its own */
+.log-filter .log-widget-search { max-width: 22rem; flex: 1 1 16rem; }
 /* the label owns the row spacing; the box keeps its own size (the global
    input rule stretches controls to full width) */
 .log-failonly { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; white-space: nowrap; }

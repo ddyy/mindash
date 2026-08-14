@@ -117,23 +117,37 @@ const fails = await get("/settings/log?fail=1");
 ok(countRows(fails) === 4, "failures filter shows only failures (3 fetches + 1 error message)", `got ${countRows(fails)}`);
 ok(/upstream 503 from example.test/.test(fails), "failure rows carry the error text");
 
+const pickable = ids[1];
 const oneWidget = await get(`/settings/log?widget=${ids[1]}`);
 ok(countRows(oneWidget) === 5, "widget filter narrows to that widget (3 fetches + 2 messages)", `got ${countRows(oneWidget)}`);
-ok(/<option value="">All widgets<\/option>/.test(oneWidget), "filter offers an all-widgets option");
+// The picker is a search box backed by a datalist: an empty box means
+// every widget, and the options carry human labels ("<page> / <title>
+// (<type>)") rather than instance ids, so they can be typed against.
+ok(/placeholder="All widgets[^"]*"/.test(oneWidget), "filter offers an all-widgets default");
+ok(/<datalist id="log-widget-options">/.test(page1), "picker is backed by a datalist");
 // the picker lists only widgets that can log (static cards never do),
-// so drive the preselect check from an id the picker actually offers
-const pickable = /<option value="(w_[0-9a-f]+)"/.exec(page1)?.[1] ?? "";
-ok(Boolean(pickable), "picker lists loggable widgets");
+// so drive the round-trip check from a label the picker actually offers
+const labels = [...page1.matchAll(/<option value="([^"]*)"><\/option>/g)].map((m) => m[1]);
+const widgetLabel = labels.find((l) => !l.startsWith("All on")) ?? "";
+ok(Boolean(widgetLabel), "picker lists loggable widgets by label", labels.slice(0, 3).join(" | "));
+// An instance id still resolves - every "updated 5m ago" link on a card
+// points at one - and comes back displayed as its label.
 const picked = await get(`/settings/log?widget=${pickable}`);
-ok(new RegExp(`<option value="${pickable}" selected>`).test(picked), "the active widget is preselected in the picker");
+const pickedLabel = /name="widget"[\s\S]*?value="([^"]*)"/.exec(picked)?.[1] ?? "";
+ok(/^.+ \/ .+ \(.+\)$/.test(pickedLabel), "an instance id resolves and is shown as its label", pickedLabel);
+// and typing the label filters to exactly the same rows as the id did
+const byLabel = await get(`/settings/log?widget=${encodeURIComponent(pickedLabel)}`);
+ok(countRows(byLabel) === countRows(picked), "typing the label filters the same as the id", `${countRows(byLabel)} vs ${countRows(picked)}`);
+// a value matching nothing falls back to the whole log, not an empty one
+const typo = await get("/settings/log?widget=Weathr");
+ok(countRows(typo) === countRows(page1), "an unmatched search shows everything, not nothing", `${countRows(typo)} vs ${countRows(page1)}`);
 ok(!/back to settings/.test(oneWidget), "no redundant back-to-settings link");
 
 // A whole page can be selected, and it filters to exactly that page's widgets.
-const firstPage = /<optgroup label="([^"]+)"/.exec(page1)?.[1] ?? "";
-ok(Boolean(firstPage), "picker groups widgets by page");
-ok(new RegExp(`<option value="page:${firstPage}"`).test(page1), "each group offers an all-on-this-page option");
+const firstPage = (labels.find((l) => l.startsWith("All on")) ?? "").slice(7);
+ok(Boolean(firstPage), "picker offers an all-on-this-page option per page", labels.slice(0, 3).join(" | "));
 const byPage = await get(`/settings/log?widget=page:${encodeURIComponent(firstPage)}`);
-ok(new RegExp(`<option value="page:${firstPage}" selected>`).test(byPage), "the page selection stays selected");
+ok(new RegExp(`value="All on ${firstPage}"[^>]*>`).test(byPage.slice(byPage.indexOf('name="widget"'), byPage.indexOf('name="widget"') + 400)) || byPage.includes(`value="All on ${firstPage}"`), "a page: link comes back as its readable label");
 ok(/<th class="log-page">Page<\/th>/.test(byPage), "the table has a Page column");
 const pagesShown = [...byPage.matchAll(/<td class="log-page">(?:<a[^>]*>)?([^<]+)/g)].map((m) => m[1].trim());
 ok(pagesShown.length > 0 && pagesShown.every((p) => p === firstPage), "every row belongs to the selected page", pagesShown.slice(0, 4).join(","));
