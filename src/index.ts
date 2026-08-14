@@ -444,6 +444,12 @@ const provider = new OAuthProvider<Env>({
   tokenEndpoint: "/token",
   clientRegistrationEndpoint: "/register",
   scopesSupported: Object.keys(KNOWN_SCOPES),
+  // RFC 9728 resource metadata must advertise the same scopes: a client
+  // that discovers us through the WWW-Authenticate challenge reads THIS
+  // document, not the AS metadata, to decide what to ask for. Without it
+  // the client sends no scope at all and consent.ts answers invalid_scope
+  // (empty scope is never silently widened to a default).
+  resourceMetadata: { scopes_supported: Object.keys(KNOWN_SCOPES) },
   accessTokenTTL: 3600,
   refreshTokenTTL: 30 * 24 * 3600,
   clientRegistrationTTL: 7 * 24 * 3600, // deliberately short for DCR clients
