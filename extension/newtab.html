@@ -13,6 +13,8 @@
   }
   main { max-width: 26rem; padding: 2rem; text-align: center; }
   main[hidden] { display: none; }
+  /* the snapshot fills the tab edge-to-edge; the page behind it never shows */
+  #snap { position: fixed; inset: 0; width: 100vw; height: 100vh; border: 0; }
   h1 { font-size: 1.1rem; margin: 0 0 0.4rem; }
   p { color: light-dark(#5b6270, #8b93a1); margin: 0 0 1.2rem; }
   input {

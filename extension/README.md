@@ -1,9 +1,21 @@
 # mindash new tab (browser extension)
 
-Opens your mindash instance in every new tab. Stores exactly one value -
-your dashboard URL (in `chrome.storage.sync`, so it follows your browser
-profile) - and requests only the `storage` permission. No analytics, no
-network access of its own: the new tab simply navigates to your URL.
+Opens your mindash instance in every new tab, painting the last-seen
+page instantly while the live one loads. Stores two things, both local
+to your browser: your dashboard URL (`chrome.storage.sync`, so it
+follows your profile) and a snapshot of the last page it fetched
+(`chrome.storage.local`, this machine only). Installs with only the
+`storage` permission; at setup it asks - optionally - for access to your
+dashboard's own origin, which is what lets it fetch the snapshot with
+your session. Decline and every new tab simply navigates, exactly as
+before. No analytics, and no request ever leaves for any other origin.
+
+Why the snapshot: an authed dashboard is deliberately served no-store,
+so a plain new tab pays a full network round trip while showing blank.
+The snapshot paints at 0ms (scripts stripped, links still work), the
+extension refetches in the background, and the tab then hands over to
+the live page. Signing out clears it on the next open; offline, the
+snapshot stays up instead of a browser error page.
 
 The first new tab after installing shows a one-field setup form. To
 change the URL later, click the extension's toolbar icon - the same
@@ -28,4 +40,7 @@ pick `manifest.json` (temporary add-ons unload on restart).
 Upload the zip in the [developer dashboard](https://chrome.google.com/webstore/devconsole).
 Listing notes: single purpose = "replace the new tab page with the
 user's self-hosted dashboard"; permissions justification = `storage`
-holds the dashboard URL; no user data is collected or transmitted.
+holds the dashboard URL and the last-page snapshot, and the optional
+host permission (requested at setup, scoped to the user's own instance)
+exists solely to fetch that snapshot with the user's session; no user
+data is collected or transmitted anywhere else.

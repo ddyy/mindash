@@ -36,10 +36,27 @@ document.getElementById("f").addEventListener("submit", (e) => {
     say("Enter an https:// URL (or http://localhost for dev).", true);
     return;
   }
-  chrome.storage.sync.set({ url: ok }, () => {
-    input.value = ok; // show the normalized form that was actually stored
-    say("Saved.");
-  });
+  // Re-request the origin permission on save: a CHANGED url means a
+  // changed origin, and the old grant does not cover it. Denial is fine -
+  // new tabs then navigate without the instant-paint snapshot.
+  const finish = () =>
+    chrome.storage.sync.set({ url: ok }, () => {
+      chrome.storage.local.remove("snapshot"); // never paint one origin's page for another
+      input.value = ok; // show the normalized form that was actually stored
+      say("Saved.");
+    });
+  if (chrome.permissions?.request) {
+    try {
+      chrome.permissions.request({ origins: [new URL(ok).origin + "/*"] }, () => {
+        void chrome.runtime.lastError;
+        finish();
+      });
+    } catch {
+      finish();
+    }
+  } else {
+    finish();
+  }
 });
 
 // The way back to a clean slate. Without this the only route was removing
@@ -47,6 +64,7 @@ document.getElementById("f").addEventListener("submit", (e) => {
 // is refused rather than treated as "unset".
 document.getElementById("clear").addEventListener("click", () => {
   chrome.storage.sync.remove("url", () => {
+    chrome.storage.local.remove("snapshot");
     input.value = "";
     say("Cleared - the next new tab will ask for a URL.");
   });

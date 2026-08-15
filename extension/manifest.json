@@ -1,9 +1,11 @@
 {
   "manifest_version": 3,
   "name": "mindash new tab",
-  "version": "1.1.0",
-  "description": "Opens your self-hosted mindash dashboard in every new tab. No data collected - the only stored value is your dashboard URL.",
-  "permissions": ["storage"],
+  "version": "1.2.0",
+  "description": "Opens your self-hosted mindash dashboard in every new tab, painting the last-seen page instantly. Stores only your dashboard URL and that snapshot, both local to your browser.",
+  "permissions": [
+    "storage"
+  ],
   "chrome_url_overrides": {
     "newtab": "newtab.html"
   },
@@ -24,5 +26,11 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://*.localhost/*",
+    "http://127.0.0.1/*"
+  ]
 }
