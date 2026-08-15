@@ -133,8 +133,12 @@ ok(Boolean(widgetLabel), "picker lists loggable widgets by label", labels.slice(
 // An instance id still resolves - every "updated 5m ago" link on a card
 // points at one - and comes back displayed as its label.
 const picked = await get(`/settings/log?widget=${pickable}`);
-const pickedLabel = /name="widget"[\s\S]*?value="([^"]*)"/.exec(picked)?.[1] ?? "";
-ok(/^.+ \/ .+ \(.+\)$/.test(pickedLabel), "an instance id resolves and is shown as its label", pickedLabel);
+// The box renders EMPTY on a filtered page (so the next pick starts from
+// the full list); the active filter is announced on its own line.
+ok(/name="widget"[\s\S]{0,400}?value=""/.test(picked), "the box comes back empty after a selection");
+const pickedLabel = /class="meta log-showing">Showing ([^·<]+)/.exec(picked)?.[1]?.trim() ?? "";
+ok(/^.+ \/ .+ \(.+\)$/.test(pickedLabel), "an instance id resolves and is announced as its label", pickedLabel);
+ok(/log-showing">[\s\S]*?<a href="[^"]*">all widgets<\/a>/.test(picked), "the announcement offers the way back to everything");
 // and typing the label filters to exactly the same rows as the id did
 const byLabel = await get(`/settings/log?widget=${encodeURIComponent(pickedLabel)}`);
 ok(countRows(byLabel) === countRows(picked), "typing the label filters the same as the id", `${countRows(byLabel)} vs ${countRows(picked)}`);
@@ -147,7 +151,7 @@ ok(!/back to settings/.test(oneWidget), "no redundant back-to-settings link");
 const firstPage = (labels.find((l) => l.startsWith("All on")) ?? "").slice(7);
 ok(Boolean(firstPage), "picker offers an all-on-this-page option per page", labels.slice(0, 3).join(" | "));
 const byPage = await get(`/settings/log?widget=page:${encodeURIComponent(firstPage)}`);
-ok(new RegExp(`value="All on ${firstPage}"[^>]*>`).test(byPage.slice(byPage.indexOf('name="widget"'), byPage.indexOf('name="widget"') + 400)) || byPage.includes(`value="All on ${firstPage}"`), "a page: link comes back as its readable label");
+ok(new RegExp(`log-showing">Showing everything on ${firstPage}`).test(byPage), "a page: link is announced as its readable label");
 ok(/<th class="log-page">Page<\/th>/.test(byPage), "the table has a Page column");
 const pagesShown = [...byPage.matchAll(/<td class="log-page">(?:<a[^>]*>)?([^<]+)/g)].map((m) => m[1].trim());
 ok(pagesShown.length > 0 && pagesShown.every((p) => p === firstPage), "every row belongs to the selected page", pagesShown.slice(0, 4).join(","));

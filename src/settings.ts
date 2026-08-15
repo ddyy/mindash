@@ -647,7 +647,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
           autocomplete="off"
           placeholder="All widgets - type to search"
           aria-label="Filter by widget"
-          value="${widgetId ? labelOf(widgetId, byId.get(widgetId)?.title ?? widgetId, byId.get(widgetId)?.type ?? "?") : pageName ? `All on ${pageName}` : ""}">
+          value="">
         <datalist id="log-widget-options">
           ${byPage.map(
             (g) => html`<option value="All on ${g.page}"></option>
@@ -659,8 +659,17 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
         }> Failures only</label>
         <button type="submit">Filter</button>
       </form>
-      ${widgetId && !focused
-        ? html`<p class="meta">(removed widget) · <a href="${href({ widget: "" })}">all widgets</a></p>`
+      <!-- The box always renders EMPTY so picking the next widget never
+           means deleting the last label first; the active filter lives
+           on this line instead, with the way out beside it. -->
+      ${widgetId || pageName
+        ? html`<p class="meta log-showing">Showing ${
+            pageName
+              ? `everything on ${pageName}`
+              : focused
+                ? labelOf(widgetId, focused.title, focused.type)
+                : "(removed widget)"
+          } · <a href="${href({ widget: "" })}">all widgets</a></p>`
         : null}
       <p class="meta log-stats">
         ${
