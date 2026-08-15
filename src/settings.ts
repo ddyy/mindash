@@ -30,7 +30,7 @@ export async function csrfToken(session: SessionInfo): Promise<string> {
 
 // logout: the account action belongs on the settings hub, not on every
 // page that borrows this shell (the log is a read-only view).
-function page(body: ReturnType<typeof html>, status = 200, cfg?: DashConfig, logout = true): Response {
+function page(body: ReturnType<typeof html>, status = 200, cfg?: DashConfig, logout = true, subpage = false): Response {
   const doc = html`<!doctype html>
 <html lang="en">
 <head>
@@ -42,7 +42,7 @@ function page(body: ReturnType<typeof html>, status = 200, cfg?: DashConfig, log
 ${cfg ? html`<style>:root { ${new SafeHtml(themeCssVars(cfg.theme))} }</style>` : null}
 </head>
 <body>
-${globalHeader("settings", { title: cfg?.theme.title, logo: cfg?.theme.logo })}
+${globalHeader("settings", { title: cfg?.theme.title, logo: cfg?.theme.logo, subpage })}
 <main style="display:block;max-width:760px;margin-inline:auto">
 ${logout ? html`<form method="post" action="/auth/logout" class="logout-top"><button type="submit">log out</button></form>` : null}
 ${body}
@@ -758,6 +758,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
     200,
     cfg,
     false, // read-only view: no logout button here
+    true, // subpage: the Settings pill stays a link back to /settings
   );
 }
 

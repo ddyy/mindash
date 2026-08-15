@@ -146,6 +146,12 @@ ok(countRows(byLabel) === countRows(picked), "typing the label filters the same 
 const typo = await get("/settings/log?widget=Weathr");
 ok(countRows(typo) === countRows(page1), "an unmatched search shows everything, not nothing", `${countRows(typo)} vs ${countRows(page1)}`);
 ok(!/back to settings/.test(oneWidget), "no redundant back-to-settings link");
+// The Settings pill is highlighted here but must stay a LINK: the log is
+// a settings SUBPAGE, and the pill is the way back up. On /settings
+// itself it stays an inert marker (re-entering would reload the page).
+ok(/<a id="nav-settings" class="view active" href="\/settings"/.test(page1), "the Settings pill links back to /settings from the log");
+const settingsHub = await get("/settings");
+ok(/<span class="view active" aria-current="page">/.test(settingsHub), "on /settings itself the pill stays a marker");
 
 // A whole page can be selected, and it filters to exactly that page's widgets.
 const firstPage = labels.find((l) => !l.startsWith("- ")) ?? "";

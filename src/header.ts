@@ -8,6 +8,10 @@ export interface HeaderOpts {
   dashHref?: string;
   editHref?: string;
   authed?: boolean; // false = brand only (public dashboard views)
+  // The surface is a child of the active view (/settings/log under
+  // Settings): the pill stays highlighted as "where you are", but it must
+  // remain a LINK - it is the way back up, not a reload of this page.
+  subpage?: boolean;
 }
 
 // Small inline icons, stroked/filled with currentColor so they follow the
@@ -69,6 +73,13 @@ export function globalHeader(active: ViewKey, opts: HeaderOpts = {}): SafeHtml {
       // would just reload the page you are on. Non-active pills stay
       // ordinary links, so the row never changes shape.
       if (v.key === active) {
+        // On a SUBPAGE the active view is an ancestor, not this page:
+        // keep the highlight but keep the link. aria-current says
+        // "current item in this set", the same claim the Dashboard pill
+        // makes from /p/<slug>.
+        if (opts.subpage) {
+          return html`<a id="${v.id}" class="view active" href="${href[v.key]}" aria-current="true">${v.icon}${v.label}</a>`;
+        }
         return html`<span class="view active" aria-current="${current[v.key]}">${v.icon}${v.label}</span>`;
       }
       return html`<a id="${v.id}" class="view" href="${href[v.key]}">${v.icon}${v.label}</a>`;
