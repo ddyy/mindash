@@ -482,6 +482,18 @@ export const EDITOR_CSS = /* css */ `
 .tz-box { flex: 1; min-width: 0; }
 .tz-box input { width: 100%; }
 .pick-btn { margin-top: 0.35rem; font-size: 0.75rem; }
+/* Inline credential creation, opened from a secret field's picker. It is
+   a nested form inside the inspector, so it needs a visible boundary -
+   without one it reads as more fields of the widget itself, and this one
+   saves to the server rather than to the draft. */
+.newcred {
+  margin-top: 0.4rem; padding: 0.55rem; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--bg);
+}
+.newcred h3 { font-size: 0.78rem; margin: 0 0 0.4rem; }
+.newcred input { width: 100%; box-sizing: border-box; margin-bottom: 0.35rem; }
+.newcred-actions { display: flex; gap: 0.4rem; margin-top: 0.2rem; }
+.newcred .error { font-size: 0.72rem; margin: 0.3rem 0 0; }
 .pick-list { display: grid; gap: 2px; margin-top: 0.35rem; max-height: 14rem;
   overflow-y: auto; overflow-x: hidden; }
 .pick-item { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 0.4rem;

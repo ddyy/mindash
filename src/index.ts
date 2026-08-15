@@ -13,7 +13,7 @@ import { settingsPage, revokeGrantAction, revokeTokenAction, csrfToken } from ".
 import { editorPage } from "./editor/page";
 import { EDITOR_JS } from "./editor/client";
 import { EDITOR_CSS } from "./editor/styles";
-import { editorPreview, editorDiff, editorYaml, editorParse, editorSave, editorRefresh, editorGeocode, editorHistory, editorRestore, editorProbe, editorSample, editorMcpTools, editorCoinSearch, editorSymbolSearch, editorYtSearch, editorUploadAsset } from "./editor/api";
+import { editorPreview, editorDiff, editorYaml, editorParse, editorSave, editorRefresh, editorGeocode, editorHistory, editorRestore, editorProbe, editorSample, editorMcpTools, editorCoinSearch, editorSymbolSearch, editorYtSearch, editorUploadAsset, editorCreateCredential } from "./editor/api";
 import {
   authorizePage,
   authorizeApprove,
@@ -233,6 +233,8 @@ const appHandler = {
             return await editorSymbolSearch(req, env);
           case "/settings/editor/ytsearch":
             return await editorYtSearch(req, env);
+          case "/settings/editor/credential":
+            return await editorCreateCredential(req, env, session);
           case "/settings/editor/upload-asset":
             return await editorUploadAsset(req, env, session);
           case "/settings/editor/history":

@@ -1998,6 +1998,20 @@ function control(desc, w) {
       opt.value = name;
       input.appendChild(opt);
     }
+    // Making a credential used to mean leaving the editor for Settings,
+    // creating it there, guessing the origin, and coming back to pick it.
+    // The type is not asked for: it is the card being edited.
+    if (desc.kind === "secret") {
+      const NEW = "\u0000new";
+      const opt = el("option", null, "+ New credential\u2026");
+      opt.value = NEW;
+      input.appendChild(opt);
+      input.addEventListener("change", () => {
+        if (input.value !== NEW) return;
+        input.value = w[desc.key] ?? "";
+        openNewCredential(w, desc, input);
+      });
+    }
     input.value = w[desc.key] ?? "";
   } else {
     input = el("input");
@@ -2470,6 +2484,60 @@ function sheetHandle(root) {
   });
   root.appendChild(handle);
   syncSheetHandle();
+}
+
+// Inline credential creation for the widget being edited. The secret is
+// posted straight to the vault and NEVER enters the draft - the document
+// only ever stores the name - so this is a real side effect of an
+// unsaved draft, which the copy says out loud.
+function openNewCredential(w, desc, select) {
+  if (document.getElementById("newcred")) return;
+  const box = el("div", "newcred");
+  box.id = "newcred";
+  box.appendChild(el("h3", null, "New credential for this " + w.type + " card"));
+  const nameI = el("input");
+  nameI.placeholder = "name (kebab-case, e.g. github-token)";
+  const valI = el("input");
+  valI.type = "password";
+  valI.placeholder = "value (sent as the Authorization header)";
+  const originI = el("input");
+  originI.placeholder = "https://api.example.com";
+  // The origin almost always IS the widget's URL, and getting it wrong
+  // is the failure people hit - the credential is refused at fetch time
+  // for an origin mismatch.
+  try { if (w.url) originI.value = new URL(w.url).origin; } catch { /* not a URL yet */ }
+  const msg = el("p", "field-help", "Saved immediately, even if you discard this draft. Remove it in Settings.");
+  const save = el("button", "btn-accent", "Create");
+  const cancel = el("button", null, "Cancel");
+  const row = el("div", "newcred-actions");
+  row.appendChild(save);
+  row.appendChild(cancel);
+  for (const n of [el("label", null, "Name"), nameI, el("label", null, "Value"), valI, el("label", null, "Allowed origin"), originI, row, msg]) box.appendChild(n);
+  cancel.addEventListener("click", () => box.remove());
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    msg.textContent = "Saving\u2026";
+    msg.className = "field-help";
+    const res = await fetch("/settings/editor/credential", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-csrf": state.csrf },
+      body: JSON.stringify({ name: nameI.value.trim(), value: valI.value, origin: originI.value.trim(), widget_type: w.type }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      save.disabled = false;
+      msg.textContent = data.error || "could not create the credential";
+      msg.className = "error";
+      return;
+    }
+    state.secretOptions[w.type] = data.names || [];
+    w[desc.key] = data.name;
+    valI.value = "";
+    box.remove();
+    changed();
+  });
+  select.parentNode.appendChild(box);
+  nameI.focus();
 }
 
 function renderInspector() {

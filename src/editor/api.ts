@@ -17,6 +17,8 @@ import { json } from "../auth/util";
 import { csrfToken } from "../settings";
 import type { SessionInfo } from "../auth/session";
 import { checkSvg } from "../svgsafe";
+import { putCredential, listCredentials } from "../vault";
+import { CREDENTIAL_WIDGET_TYPES } from "../widgets";
 
 // Editor API (plan: "Settings editor"). The client edits a DRAFT document;
 // nothing becomes active until save, which goes through publishConfig like
@@ -844,6 +846,51 @@ function sniffImage(buf: Uint8Array): { ext: string; mime: string } | null {
     return { ext: "webp", mime: "image/webp" };
   }
   return null;
+}
+
+// Create a vault credential WITHOUT leaving the widget you are editing.
+// The widget type is not asked for - it is the card being edited, which
+// is the only type this credential could be for. Eligibility is derived
+// (a type qualifies by having a secret field), so a custom widget works
+// here the day it is written, with no core file to edit.
+//
+// The SECRET NEVER TOUCHES THE DRAFT. It is posted straight here and
+// sealed; the config document only ever stores the credential's name.
+// That also means this is a real side effect from an unsaved draft: the
+// credential outlives a discarded draft, and Settings is where it is
+// removed.
+export async function editorCreateCredential(req: Request, env: Env, session: SessionInfo): Promise<Response> {
+  if (req.headers.get("x-csrf") !== (await csrfToken(session))) {
+    return json(403, { error: "stale editor session (CSRF) - reload" });
+  }
+  let body: { name?: unknown; value?: unknown; origin?: unknown; widget_type?: unknown };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    return json(400, { error: "expected a JSON body" });
+  }
+  const widgetType = String(body.widget_type ?? "");
+  // The loud failure the old hardcoded list gave silently: a type that
+  // cannot hold a credential says so, instead of being filtered out and
+  // reported as "select at least one widget type".
+  if (!CREDENTIAL_WIDGET_TYPES.includes(widgetType)) {
+    return json(400, { error: `widget type "${widgetType.slice(0, 40)}" does not take a credential` });
+  }
+  const err = await putCredential(env, {
+    name: String(body.name ?? ""),
+    value: String(body.value ?? ""),
+    origin: String(body.origin ?? ""),
+    widgetTypes: [widgetType],
+    eligibleTypes: CREDENTIAL_WIDGET_TYPES,
+  });
+  if (err) return json(400, { error: err });
+  // Hand back the names this type may now pick from, so the editor can
+  // refresh its options without a reload.
+  const creds = await listCredentials(env);
+  return json(200, {
+    name: String(body.name ?? "").trim(),
+    names: creds.filter((c) => c.widgetTypes.includes(widgetType)).map((c) => c.name),
+  });
 }
 
 export async function editorUploadAsset(req: Request, env: Env, session: SessionInfo): Promise<Response> {

@@ -20,8 +20,11 @@ const KV_FINGERPRINT = "vault:key-fingerprint"; // sha256 of the raw key — NOT
 
 export const CREDENTIAL_NAME = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
-// Widget types allowed to reference vault credentials at all.
-export const CREDENTIAL_TYPES = ["json-api", "mcp", "crypto"] as const;
+// NOTE: which widget types may hold a credential is NOT decided here.
+// This module is storage; eligibility is widget policy, and it lives with
+// the widgets (CREDENTIAL_WIDGET_TYPES in ./widgets, derived from which
+// defs ask for a secret). Callers pass the eligible set in. Importing it
+// here would also be a cycle - the widget files import this module.
 
 export interface CredentialMeta {
   name: string;
@@ -194,6 +197,7 @@ export interface PutCredentialInput {
   value: string;
   origin: string; // exact https origin the credential may be sent to
   widgetTypes: string[];
+  eligibleTypes: readonly string[]; // widget policy, supplied by the caller
 }
 
 export async function putCredential(env: Env, input: PutCredentialInput): Promise<string | null> {
@@ -203,7 +207,7 @@ export async function putCredential(env: Env, input: PutCredentialInput): Promis
   if (!value || value.length > 4096) return "value is required (max 4096 chars)";
   const origin = normalizeOrigin(input.origin);
   if (!origin) return "origin must be a valid https URL";
-  const types = input.widgetTypes.filter((t) => (CREDENTIAL_TYPES as readonly string[]).includes(t));
+  const types = input.widgetTypes.filter((t) => input.eligibleTypes.includes(t));
   if (types.length === 0) return "select at least one widget type";
   const typesCsv = types.join(",");
   const key = await loadKey(env, true);

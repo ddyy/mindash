@@ -6,7 +6,8 @@ import { html, SafeHtml } from "./html";
 import { relativeTime } from "./widgets/shared";
 import { sha256Hex } from "./auth/util";
 import type { SessionInfo } from "./auth/session";
-import { listCredentials, putCredential, deleteCredential, normalizeOrigin, vaultKeyStatus, CREDENTIAL_TYPES } from "./vault";
+import { listCredentials, putCredential, deleteCredential, normalizeOrigin, vaultKeyStatus } from "./vault";
+import { CREDENTIAL_WIDGET_TYPES } from "./widgets";
 import { listConnections, deleteConnection, startConnect } from "./mcpclient";
 import {
   logRetentionDays,
@@ -262,7 +263,7 @@ export async function settingsPage(
       <div class="field">
         <span class="field-label">Usable by</span>
         <div class="checks">
-          ${CREDENTIAL_TYPES.map(
+          ${CREDENTIAL_WIDGET_TYPES.map(
             (t) => html`<label class="check"><input type="checkbox" name="types" value="${t}"> ${t}</label>`,
           )}
         </div>
@@ -772,6 +773,7 @@ export async function addCredentialAction(req: Request, env: Env, session: Sessi
   const name = String(form.get("name") ?? "");
   const rawOrigin = String(form.get("origin") ?? "");
   const err = await putCredential(env, {
+    eligibleTypes: CREDENTIAL_WIDGET_TYPES,
     name,
     value: String(form.get("value") ?? ""),
     origin: rawOrigin,

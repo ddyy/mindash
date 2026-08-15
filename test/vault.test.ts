@@ -105,3 +105,46 @@ test("credentialHeader: crypto sends the bare CoinGecko header, others Bearer", 
     /not allowed on widget type/,
   );
 });
+
+// ---------- eligibility is derived, not declared ----------
+//
+// The list of types that may hold a credential used to be a literal in
+// vault.ts. It was the same information the defs already carried, so it
+// could drift - and did: crypto grew a secret field while the list still
+// said json-api and mcp. This asserts the two can never disagree again,
+// which is the whole point of deriving it.
+test("credential eligibility matches exactly the defs that ask for a secret", async () => {
+  const { CREDENTIAL_WIDGET_TYPES } = await import("../src/widgets");
+  const { WIDGETS } = await import("../src/widgets");
+
+  const asksForSecret = Object.entries(WIDGETS)
+    .filter(([, def]) => def.form.some((f) => f.kind === "secret"))
+    .map(([type]) => type)
+    .sort();
+
+  assert.deepEqual(CREDENTIAL_WIDGET_TYPES, asksForSecret);
+  assert.ok(CREDENTIAL_WIDGET_TYPES.length > 0, "a vault nothing can use is a broken vault");
+});
+
+test("a type with no secret field cannot hold a credential", async () => {
+  const { CREDENTIAL_WIDGET_TYPES } = await import("../src/widgets");
+  // A clock has nothing to authenticate and a bookmarks card never
+  // fetches; offering them a credential would be offering a footgun.
+  for (const t of ["clock", "countdown", "note", "bookmarks", "search"]) {
+    assert.equal(CREDENTIAL_WIDGET_TYPES.includes(t), false, `${t} must not be credential-eligible`);
+  }
+});
+
+// A custom widget is the reason this changed: dropping a file into
+// src/widgets/ that asks for a secret must make it eligible, with no
+// core file edited. Simulated here by asserting the rule is a pure
+// function of the def, not of any list.
+test("eligibility follows the def, so a new widget needs no core edit", async () => {
+  const { CREDENTIAL_WIDGET_TYPES, WIDGETS } = await import("../src/widgets");
+  for (const type of CREDENTIAL_WIDGET_TYPES) {
+    assert.ok(
+      WIDGETS[type]?.form.some((f) => f.kind === "secret"),
+      `${type} is eligible but its def never asks for a secret`,
+    );
+  }
+});

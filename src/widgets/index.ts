@@ -77,6 +77,19 @@ export const WIDGET_EXTRA_SOURCE_FIELDS: Record<
   ((base: RawWidget | undefined, next: RawWidget) => string[]) | undefined
 > = Object.fromEntries(Object.entries(WIDGETS).map(([type, def]) => [type, def.extraSourceFields?.bind(def)]));
 
+// Which types may hold a vault credential - DERIVED, not declared. A
+// type is eligible exactly when its form asks for a secret, because that
+// field IS the declaration: a def that offers no credential picker has
+// nothing to bind one to. This used to be a literal list in vault.ts,
+// which was the same three names written twice and drifted once already
+// (crypto gained a secret field before the list heard about it). It also
+// meant a custom widget could not use the vault without editing a core
+// file it does not own.
+export const CREDENTIAL_WIDGET_TYPES: string[] = Object.entries(WIDGETS)
+  .filter(([, def]) => def.form.some((f) => f.kind === "secret"))
+  .map(([type]) => type)
+  .sort();
+
 // Default display titles when a widget has no explicit title.
 export const WIDGET_DEFAULT_TITLES: Record<string, string> = Object.fromEntries(
   Object.entries(WIDGETS).map(([type, def]) => [type, def.meta.defaultTitle ?? def.meta.title]),
