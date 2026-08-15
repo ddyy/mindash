@@ -64,3 +64,44 @@ test("normalizeOrigin: keeps scheme+host, drops the rest, https only", () => {
   assert.equal(normalizeOrigin("http://api.github.com"), null);
   assert.equal(normalizeOrigin("not a url"), null);
 });
+
+
+// The wire-format rule credentialHeader lives by: a crypto-typed send
+// uses CoinGecko's bare x-cg-demo-api-key header, everything else the
+// Bearer Authorization the vault has always emitted. A regression here
+// is silent - CoinGecko ignores an Authorization header and the widget
+// just looks keyless (429s) again.
+test("credentialHeader: crypto sends the bare CoinGecko header, others Bearer", async () => {
+  const { credentialHeader } = await import("../src/vault");
+  const rawKey = crypto.getRandomValues(new Uint8Array(32));
+  const key = await importKey(rawKey);
+  const mk = b64url(rawKey);
+  const mkFp = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", rawKey)));
+  const rowFor = async (name: string, types: string, origin: string) => {
+    const sealed = await seal(key, "sekrit-123", [name, types, origin, "authorization"]);
+    return {
+      name, widget_types: types, origin, header: "authorization",
+      ciphertext: b64url(sealed.ct), iv: b64url(sealed.iv), created_at: 1,
+    };
+  };
+  const rows: Record<string, unknown> = {
+    gecko: await rowFor("gecko", "crypto", "https://api.coingecko.com"),
+    plain: await rowFor("plain", "json-api", "https://api.example.com"),
+  };
+  const env = {
+    MASTER_KEY: mk,
+    OAUTH_KV: { get: async (k: string) => (k.includes("fingerprint") ? mkFp : null), put: async () => {} },
+    DB: { prepare: () => ({ bind: (name: string) => ({ first: async () => rows[name] ?? null }) }) },
+  } as never;
+
+  const geckoHeaders = await credentialHeader(env, "gecko", "crypto", "https://api.coingecko.com/api/v3/simple/price");
+  assert.deepEqual(geckoHeaders, { "x-cg-demo-api-key": "sekrit-123" });
+  const plainHeaders = await credentialHeader(env, "plain", "json-api", "https://api.example.com/v1");
+  assert.deepEqual(plainHeaders, { authorization: "Bearer sekrit-123" });
+  // the widget-type allowlist still holds: a json-api credential cannot
+  // be wielded by a crypto widget
+  await assert.rejects(
+    () => credentialHeader(env, "plain", "crypto", "https://api.example.com/v1"),
+    /not allowed on widget type/,
+  );
+});

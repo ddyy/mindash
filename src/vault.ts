@@ -21,7 +21,7 @@ const KV_FINGERPRINT = "vault:key-fingerprint"; // sha256 of the raw key — NOT
 export const CREDENTIAL_NAME = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 // Widget types allowed to reference vault credentials at all.
-export const CREDENTIAL_TYPES = ["json-api", "mcp"] as const;
+export const CREDENTIAL_TYPES = ["json-api", "mcp", "crypto"] as const;
 
 export interface CredentialMeta {
   name: string;
@@ -284,7 +284,15 @@ export async function credentialHeader(
   } catch {
     throw new Error(`credential "${name}" failed to decrypt (binding or key mismatch) - re-save it in Settings`);
   }
-  return { [row.header]: `Bearer ${new TextDecoder().decode(plain)}` };
+  const secret = new TextDecoder().decode(plain);
+  // The wire header is a function of the WIDGET TYPE, not of the stored
+  // row: the row's header column is AAD material (it keeps old rows
+  // decrypting), while the send format follows the API being called.
+  // CoinGecko demo keys travel as a bare x-cg-demo-api-key header - a
+  // Bearer Authorization is silently ignored there, which reads as
+  // "keyless" and keeps the shared-egress-IP 429s coming.
+  if (widgetType === "crypto") return { "x-cg-demo-api-key": secret };
+  return { [row.header]: `Bearer ${secret}` };
 }
 
 // Pure crypto core exported for tests.
