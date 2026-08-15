@@ -456,7 +456,12 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
   // apart, and it keeps the value unique when titles repeat.
   const optionOf = (id: string, title: string, type: string) => `- ${title} (${type}) · ${pageOf.get(id) ?? "unplaced"}`;
   const canonical = new Map<string, string>();
-  for (const p of cfg.pages) canonical.set(`all on ${p.name.toLowerCase()}`, `page:${p.name}`);
+  // Page rows are just the page name; "all on <page>" stays resolvable
+  // for anything that bookmarked the older wording.
+  for (const p of cfg.pages) {
+    canonical.set(p.name.toLowerCase(), `page:${p.name}`);
+    canonical.set(`all on ${p.name.toLowerCase()}`, `page:${p.name}`);
+  }
   for (const w of cfg.widgets) {
     // both spellings resolve: the dashed option and the older plain label
     canonical.set(labelOf(w.id, w.title, w.type).toLowerCase(), w.id);
@@ -659,7 +664,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
           value="">
         <datalist id="log-widget-options">
           ${byPage.map(
-            (g) => html`<option value="All on ${g.page}"></option>
+            (g) => html`<option value="${g.page}"></option>
             ${g.widgets.map((w) => html`<option value="${optionOf(w.id, w.title, w.type)}"></option>`)}`,
           )}
         </datalist>

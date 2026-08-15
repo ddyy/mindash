@@ -128,7 +128,7 @@ ok(/<datalist id="log-widget-options">/.test(page1), "picker is backed by a data
 // the picker lists only widgets that can log (static cards never do),
 // so drive the round-trip check from a label the picker actually offers
 const labels = [...page1.matchAll(/<option value="([^"]*)"><\/option>/g)].map((m) => m[1]);
-const widgetLabel = labels.find((l) => !l.startsWith("All on")) ?? "";
+const widgetLabel = labels.find((l) => l.startsWith("- ")) ?? "";
 ok(Boolean(widgetLabel), "picker lists loggable widgets by label", labels.slice(0, 3).join(" | "));
 // An instance id still resolves - every "updated 5m ago" link on a card
 // points at one - and comes back displayed as its label.
@@ -148,8 +148,8 @@ ok(countRows(typo) === countRows(page1), "an unmatched search shows everything, 
 ok(!/back to settings/.test(oneWidget), "no redundant back-to-settings link");
 
 // A whole page can be selected, and it filters to exactly that page's widgets.
-const firstPage = (labels.find((l) => l.startsWith("All on")) ?? "").slice(7);
-ok(Boolean(firstPage), "picker offers an all-on-this-page option per page", labels.slice(0, 3).join(" | "));
+const firstPage = labels.find((l) => !l.startsWith("- ")) ?? "";
+ok(Boolean(firstPage), "picker offers a bare page-name option per page", labels.slice(0, 3).join(" | "));
 const byPage = await get(`/settings/log?widget=page:${encodeURIComponent(firstPage)}`);
 ok(new RegExp(`log-showing">Showing everything on ${firstPage}`).test(byPage), "a page: link is announced as its readable label");
 ok(/<th class="log-page">Page<\/th>/.test(byPage), "the table has a Page column");
