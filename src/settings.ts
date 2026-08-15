@@ -450,9 +450,18 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
   // result - a typo should show the whole log, not look like a dead
   // instance.
   const labelOf = (id: string, title: string, type: string) => `${pageOf.get(id) ?? "unplaced"} / ${title} (${type})`;
+  // What the DATALIST offers: widget entries lead with a dash so the
+  // dropdown reads as a tree under each "All on <page>" row. The page
+  // still rides at the end - it is what tells two cards called "Uptime"
+  // apart, and it keeps the value unique when titles repeat.
+  const optionOf = (id: string, title: string, type: string) => `- ${title} (${type}) · ${pageOf.get(id) ?? "unplaced"}`;
   const canonical = new Map<string, string>();
   for (const p of cfg.pages) canonical.set(`all on ${p.name.toLowerCase()}`, `page:${p.name}`);
-  for (const w of cfg.widgets) canonical.set(labelOf(w.id, w.title, w.type).toLowerCase(), w.id);
+  for (const w of cfg.widgets) {
+    // both spellings resolve: the dashed option and the older plain label
+    canonical.set(labelOf(w.id, w.title, w.type).toLowerCase(), w.id);
+    canonical.set(optionOf(w.id, w.title, w.type).toLowerCase(), w.id);
+  }
   const selection =
     byId.has(rawSelection) || rawSelection.startsWith("page:")
       ? rawSelection
@@ -651,7 +660,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
         <datalist id="log-widget-options">
           ${byPage.map(
             (g) => html`<option value="All on ${g.page}"></option>
-            ${g.widgets.map((w) => html`<option value="${labelOf(w.id, w.title, w.type)}"></option>`)}`,
+            ${g.widgets.map((w) => html`<option value="${optionOf(w.id, w.title, w.type)}"></option>`)}`,
           )}
         </datalist>
         <label class="log-failonly"><input type="checkbox" name="fail" value="1"${
