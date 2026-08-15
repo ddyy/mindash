@@ -467,17 +467,26 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
     canonical.set(labelOf(w.id, w.title, w.type).toLowerCase(), w.id);
     canonical.set(optionOf(w.id, w.title, w.type).toLowerCase(), w.id);
   }
+  // Types get the same treatment as pages: "crypto widgets" in the
+  // datalist, "type:crypto" in the URL.
+  const loggableTypes = new Set(
+    cfg.widgets.filter((w) => isPullWidget(w) || w.type === "heartbeat" || w.type === "log").map((w) => w.type),
+  );
+  for (const t of loggableTypes) canonical.set(`${t} widgets`, `type:${t}`);
   const selection =
-    byId.has(rawSelection) || rawSelection.startsWith("page:")
+    byId.has(rawSelection) || rawSelection.startsWith("page:") || rawSelection.startsWith("type:")
       ? rawSelection
       : (canonical.get(rawSelection.trim().toLowerCase()) ?? "");
   const pageName = selection.startsWith("page:") ? selection.slice(5) : "";
-  const widgetId = pageName ? "" : selection;
+  const typeName = !pageName && selection.startsWith("type:") ? selection.slice(5) : "";
+  const widgetId = pageName || typeName ? "" : selection;
   const pageIds = pageName
     ? cfg.pages
         .filter((p) => p.name === pageName)
         .flatMap((p) => p.rows.flatMap((r) => r.columns.flatMap((c) => c.widgets.map((w) => w.id))))
-    : [];
+    : typeName
+      ? cfg.widgets.filter((w) => w.type === typeName).map((w) => w.id)
+      : [];
 
   interface Entry {
     at: number;
@@ -497,11 +506,11 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
   // A page selection with no widgets still has to filter to NOTHING
   // rather than falling through to "all" - an emptied page shows an empty
   // log, not the whole instance.
-  const idFilter = widgetId ? [widgetId] : pageName ? pageIds : [];
+  const idFilter = widgetId ? [widgetId] : pageName || typeName ? pageIds : [];
   const idPlaceholders = idFilter.map((_, i) => `?${i + 1}`).join(",");
   const idClause = widgetId
     ? "instance_id = ?1"
-    : pageName
+    : pageName || typeName
       ? idFilter.length > 0
         ? `instance_id IN (${idPlaceholders})`
         : "1 = 0"
@@ -667,6 +676,7 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
             (g) => html`<option value="${g.page}"></option>
             ${g.widgets.map((w) => html`<option value="${optionOf(w.id, w.title, w.type)}"></option>`)}`,
           )}
+          ${[...loggableTypes].sort().map((t) => html`<option value="${t} widgets"></option>`)}
         </datalist>
         <label class="log-failonly"><input type="checkbox" name="fail" value="1"${
           failOnly ? new SafeHtml(" checked") : null
@@ -676,13 +686,15 @@ export async function logPage(env: Env, url: URL): Promise<Response> {
       <!-- The box always renders EMPTY so picking the next widget never
            means deleting the last label first; the active filter lives
            on this line instead, with the way out beside it. -->
-      ${widgetId || pageName
+      ${widgetId || pageName || typeName
         ? html`<p class="meta log-showing">Showing ${
             pageName
               ? `everything on ${pageName}`
-              : focused
-                ? labelOf(widgetId, focused.title, focused.type)
-                : "(removed widget)"
+              : typeName
+                ? `every ${typeName} widget`
+                : focused
+                  ? labelOf(widgetId, focused.title, focused.type)
+                  : "(removed widget)"
           } · <a href="${href({ widget: "" })}">all widgets</a></p>`
         : null}
       <p class="meta log-stats">
